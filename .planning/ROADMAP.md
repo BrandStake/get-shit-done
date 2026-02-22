@@ -31,11 +31,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. gsd-executor makes delegation decision based on complexity threshold (>3 files OR domain expertise clearly beneficial)
   4. When specialist unavailable, gsd-executor executes task directly without errors
   5. All 127+ VoltAgent specialists are detectable via dynamic registry population
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md — Domain detection patterns and specialist registry mapping
+- [ ] 01-02-PLAN.md — Configuration schema with feature flags and fallback settings
+- [ ] 01-03-PLAN.md — Availability checking, routing logic, and adapter functions
+- [ ] 01-04-PLAN.md — End-to-end testing and backward compatibility validation
 
 ### Phase 2: Adapters - Context Translation
 **Goal**: gsd-executor can translate GSD task format to specialist prompts and parse specialist output back to GSD format
@@ -125,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation - Detection & Routing | 0/TBD | Not started | - |
+| 1. Foundation - Detection & Routing | 0/4 | Ready to execute | - |
 | 2. Adapters - Context Translation | 0/TBD | Not started | - |
 | 3. Integration - Wiring & Delegation | 0/TBD | Not started | - |
 | 4. Configuration - Settings & Registry | 0/TBD | Not started | - |

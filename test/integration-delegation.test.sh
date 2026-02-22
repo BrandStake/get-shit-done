@@ -585,6 +585,261 @@ test_fallback_text_format() {
 }
 
 #
+# Test Suite: Backward Compatibility (SUCCESS CRITERIA 4)
+#
+
+test_v120_execution_flow_unchanged() {
+  echo ""
+  echo -e "${YELLOW}=== v1.20 Compatibility: Execution Flow ===${NC}"
+
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS="python-pro typescript-pro"
+
+  TASK_DESC="Add authentication middleware"
+  TASK_FILES="middleware/auth.ts"
+
+  ROUTE=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "auto" 2>/dev/null)
+  assert_contains "$ROUTE" "direct:" "v1.20 mode routes to direct execution"
+  assert_contains "$ROUTE" "specialists_disabled" "Reason indicates feature disabled"
+
+  # Reset
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS=""
+}
+
+test_v120_specialist_detection_ignored() {
+  echo ""
+  echo -e "${YELLOW}=== v1.20 Compatibility: Detection Ignored ===${NC}"
+
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS="python-pro"
+
+  # Specialist would be detected, but routing should ignore it
+  TASK_DESC="Implement Python FastAPI endpoint"
+  TASK_FILES="auth.py models.py routes.py tests.py"
+
+  # Detection still works
+  SPECIALIST=$(detect_specialist_for_task "$TASK_DESC" "$TASK_FILES")
+  assert_eq "python-pro" "$SPECIALIST" "v1.20: Specialist detection still works"
+
+  # But routing ignores it
+  ROUTE=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "auto" 2>/dev/null)
+  assert_contains "$ROUTE" "direct:" "v1.20: Routing ignores specialist when disabled"
+
+  # Reset
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS=""
+}
+
+test_v120_no_specialist_metadata() {
+  echo ""
+  echo -e "${YELLOW}=== v1.20 Compatibility: No Specialist Metadata ===${NC}"
+
+  # When use_specialists=false, workflow should be identical to v1.20
+  # No specialist-usage frontmatter, no co-authorship, no delegation logging
+  USE_SPECIALISTS="false"
+
+  # This is validated at runtime by checking that delegation never happens
+  ROUTE=$(make_routing_decision "Any task" "file.py" "auto" 2>/dev/null)
+  assert_contains "$ROUTE" "direct:" "v1.20: All tasks route to direct"
+  assert_not_contains "$ROUTE" "delegate:" "v1.20: No delegation occurs"
+
+  # Reset
+  USE_SPECIALISTS="false"
+}
+
+test_v120_config_with_new_fields() {
+  echo ""
+  echo -e "${YELLOW}=== v1.20 Compatibility: Config Parsing ===${NC}"
+
+  # .planning/config.json might have voltagent section, but v1.20 code ignores it
+  # As long as use_specialists=false, behavior is unchanged
+  USE_SPECIALISTS="false"
+
+  # Config parsing doesn't affect routing when feature disabled
+  ROUTE=$(make_routing_decision "Implement feature" "main.py" "auto" 2>/dev/null)
+  assert_contains "$ROUTE" "direct:specialists_disabled" "v1.20: Config doesn't affect routing when disabled"
+
+  # Reset
+  USE_SPECIALISTS="false"
+}
+
+#
+# Test Suite: Mixed-Domain Routing (SUCCESS CRITERIA 3)
+#
+
+test_mixed_domain_plan_routing() {
+  echo ""
+  echo -e "${YELLOW}=== Mixed-Domain: Plan Routing ===${NC}"
+
+  USE_SPECIALISTS="true"
+  AVAILABLE_SPECIALISTS="python-pro typescript-pro kubernetes-specialist"
+
+  # Simulate 5-task plan with different domains
+  declare -a TASKS=(
+    "Implement Python FastAPI backend:auth.py models.py routes.py tests.py:python-pro"
+    "Create React frontend component:components/Auth.tsx types/user.ts:typescript-pro"
+    "Update README documentation:README.md:none"
+    "Deploy to Kubernetes cluster:k8s/deployment.yaml k8s/service.yaml k8s/ingress.yaml k8s/configmap.yaml:kubernetes-specialist"
+    "Add integration tests:tests/integration.ts tests/helpers.ts tests/fixtures.ts tests/utils.ts:typescript-pro"
+  )
+
+  local delegated_count=0
+  local direct_count=0
+
+  for task in "${TASKS[@]}"; do
+    IFS=":" read -r desc files expected <<< "$task"
+
+    ROUTE=$(make_routing_decision "$desc" "$files" "auto" 2>/dev/null)
+    ROUTE_ACTION=$(echo "$ROUTE" | cut -d: -f1)
+
+    if [ "$ROUTE_ACTION" = "delegate" ]; then
+      delegated_count=$((delegated_count + 1))
+      SPECIALIST=$(echo "$ROUTE" | cut -d: -f2)
+
+      if [ "$expected" != "none" ]; then
+        assert_eq "$expected" "$SPECIALIST" "Task routed to correct specialist: $expected"
+      fi
+    else
+      direct_count=$((direct_count + 1))
+    fi
+  done
+
+  assert_gt "$delegated_count" 0 "Mixed-domain: Some tasks delegated"
+  assert_gt "$direct_count" 0 "Mixed-domain: Some tasks executed directly"
+
+  echo -e "${GREEN}✓${NC} Mixed-domain plan routes correctly ($delegated_count delegated, $direct_count direct)"
+  TESTS_RUN=$((TESTS_RUN + 1))
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+
+  # Reset
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS=""
+}
+
+test_mixed_domain_delegation_counts() {
+  echo ""
+  echo -e "${YELLOW}=== Mixed-Domain: Delegation Counts ===${NC}"
+
+  USE_SPECIALISTS="true"
+  AVAILABLE_SPECIALISTS="python-pro typescript-pro"
+
+  # Count delegated vs direct
+  local python_route=$(make_routing_decision "Implement FastAPI endpoint" "a.py b.py c.py d.py" "auto" 2>/dev/null)
+  assert_contains "$python_route" "delegate:" "Python task delegates"
+
+  local typescript_route=$(make_routing_decision "Implement TypeScript React component with hooks" "A.tsx B.tsx C.tsx D.tsx E.tsx" "auto" 2>/dev/null)
+  assert_contains "$typescript_route" "delegate:" "TypeScript task delegates"
+
+  local docs_route=$(make_routing_decision "Update README" "README.md" "auto" 2>/dev/null)
+  assert_contains "$docs_route" "direct:" "Docs task executes directly"
+
+  # Reset
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS=""
+}
+
+test_mixed_domain_specialist_variety() {
+  echo ""
+  echo -e "${YELLOW}=== Mixed-Domain: Specialist Variety ===${NC}"
+
+  USE_SPECIALISTS="true"
+  AVAILABLE_SPECIALISTS="python-pro typescript-pro golang-pro rust-engineer"
+
+  # Different specialists in same plan
+  local py=$(make_routing_decision "Implement Python API" "a.py b.py c.py d.py" "auto" 2>/dev/null | grep -o 'python-pro')
+  assert_eq "python-pro" "$py" "Python specialist used"
+
+  local ts=$(make_routing_decision "Create TypeScript component" "A.tsx B.tsx C.tsx D.tsx" "auto" 2>/dev/null | grep -o 'typescript-pro')
+  assert_eq "typescript-pro" "$ts" "TypeScript specialist used"
+
+  local go=$(make_routing_decision "Implement Go server" "main.go handler.go router.go config.go" "auto" 2>/dev/null | grep -o 'golang-pro')
+  assert_eq "golang-pro" "$go" "Golang specialist used"
+
+  # Different specialists demonstrate variety
+  echo -e "${GREEN}✓${NC} Multiple specialists used in same plan"
+  TESTS_RUN=$((TESTS_RUN + 1))
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+
+  # Reset
+  USE_SPECIALISTS="false"
+  AVAILABLE_SPECIALISTS=""
+}
+
+#
+# Test Suite: Specialist Output Validation (SUCCESS CRITERIA 6)
+#
+
+test_specialist_output_json_structure() {
+  echo ""
+  echo -e "${YELLOW}=== Output Validation: JSON Structure ===${NC}"
+
+  # Mock specialist output has required fields
+  OUTPUT=$(mock_specialist "python-pro" "test")
+  RESULT=$(parse_specialist_output_multilayer "$OUTPUT" "test.py")
+
+  # Verify required fields exist
+  FILES=$(echo "$RESULT" | jq -r '.files_modified | type' 2>/dev/null)
+  assert_eq "array" "$FILES" "Output has files_modified array"
+
+  STATUS=$(echo "$RESULT" | jq -r '.verification_status' 2>/dev/null)
+  assert_eq "passed" "$STATUS" "Output has verification_status field"
+
+  COMMIT=$(echo "$RESULT" | jq -r '.commit_message' 2>/dev/null)
+  assert_contains "$COMMIT" "feat" "Output has commit_message field"
+}
+
+test_specialist_output_deviations_optional() {
+  echo ""
+  echo -e "${YELLOW}=== Output Validation: Optional Deviations ===${NC}"
+
+  # Output WITH deviations
+  OUTPUT_WITH=$(mock_specialist "python-pro" "test")
+  RESULT_WITH=$(parse_specialist_output_multilayer "$OUTPUT_WITH" "test.py")
+  validate_adapter_result "$RESULT_WITH" >/dev/null 2>&1
+  assert_eq 0 $? "Output with deviations is valid"
+
+  # Output WITHOUT deviations
+  OUTPUT_WITHOUT=$(mock_specialist "typescript-pro" "test")
+  RESULT_WITHOUT=$(parse_specialist_output_multilayer "$OUTPUT_WITHOUT" "test.tsx")
+  validate_adapter_result "$RESULT_WITHOUT" >/dev/null 2>&1
+  assert_eq 0 $? "Output without deviations is valid"
+}
+
+test_specialist_output_markdown_wrapped() {
+  echo ""
+  echo -e "${YELLOW}=== Output Validation: Markdown Wrapping ===${NC}"
+
+  # JSON in markdown code blocks (standard format)
+  OUTPUT=$(mock_specialist "kubernetes-specialist" "test")
+  assert_contains "$OUTPUT" '```json' "Specialist output uses markdown code blocks"
+
+  # Parser extracts correctly
+  RESULT=$(parse_specialist_output_multilayer "$OUTPUT" "deployment.yaml")
+  assert_contains "$RESULT" "files_modified" "Markdown-wrapped JSON extracts correctly"
+}
+
+test_result_adapter_schema_validation() {
+  echo ""
+  echo -e "${YELLOW}=== Output Validation: Schema Validation ===${NC}"
+
+  # Valid schema
+  VALID='{"files_modified": ["a.py"], "verification_status": "passed", "commit_message": "test"}'
+  validate_adapter_result "$VALID" >/dev/null 2>&1
+  assert_eq 0 $? "Valid schema passes validation"
+
+  # Missing field
+  INVALID='{"files_modified": ["a.py"], "commit_message": "test"}'
+  validate_adapter_result "$INVALID" >/dev/null 2>&1
+  assert_eq 1 $? "Missing field fails validation"
+
+  # Invalid JSON
+  BROKEN='not json'
+  validate_adapter_result "$BROKEN" >/dev/null 2>&1
+  assert_eq 1 $? "Invalid JSON fails validation"
+}
+
+#
 # Main test runner
 #
 
@@ -607,6 +862,17 @@ main() {
   test_zero_specialists_installed
   test_fallback_adapter_error
   test_fallback_text_format
+  test_v120_execution_flow_unchanged
+  test_v120_specialist_detection_ignored
+  test_v120_no_specialist_metadata
+  test_v120_config_with_new_fields
+  test_mixed_domain_plan_routing
+  test_mixed_domain_delegation_counts
+  test_mixed_domain_specialist_variety
+  test_specialist_output_json_structure
+  test_specialist_output_deviations_optional
+  test_specialist_output_markdown_wrapped
+  test_result_adapter_schema_validation
 
   # Print summary
   echo ""

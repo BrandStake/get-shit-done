@@ -788,22 +788,6 @@ generate_gsd_rules_section() {
    - Required fields: files_modified, verification_status, commit_message, deviations
    - See output format below
 
-4. **READ-ONLY State Files** - DO NOT modify these files:
-   - .planning/STATE.md
-   - .planning/ROADMAP.md
-   - .planning/REQUIREMENTS.md
-   - .planning/phases/**/*-PLAN.md
-
-   These files are managed by gsd-executor. You receive them as context via @-references.
-   Return structured output instead - gsd-executor will update state files based on your results.
-
-**Why READ-ONLY:** Single-writer pattern prevents race conditions and state corruption.
-gsd-executor is the sole writer for execution state. You focus on task implementation,
-return structured data, and gsd-executor handles state updates atomically.
-
-If you encounter plan deviations (bugs, missing features), document in your output's
-"deviations" field. Do NOT modify PLAN.md directly.
-
 ## Output Format
 
 **JSON Format (preferred):**
@@ -1454,7 +1438,74 @@ For each task:
 
    - **If ROUTE_ACTION = "delegate":**
      ```bash
-`cat /tmp/replace_code.txt`
+     SPECIALIST="$ROUTE_DETAIL"
+     echo "→ Delegating task $TASK_NUM to: $SPECIALIST"
+
+     # Generate specialist prompt using adapter
+     SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
+
+     # Build context injection list (CLAUDE.md, skills, task files)
+     FILES_TO_READ="CLAUDE.md"
+
+     # Add skills if they exist
+     if [ -d .agents/skills ]; then
+       FILES_TO_READ="$FILES_TO_READ .agents/skills/"
+     fi
+
+     # Add task-specific files
+     if [ -n "$TASK_FILES" ]; then
+       for file in $TASK_FILES; do
+         FILES_TO_READ="$FILES_TO_READ $file"
+       done
+     fi
+
+     # Invoke specialist via Task tool (identical pattern to gsd-executor invocation)
+     SPECIALIST_OUTPUT=$(Task(
+       subagent_type="$SPECIALIST",
+       model="${EXECUTOR_MODEL}",
+       prompt="
+<task_context>
+${SPECIALIST_PROMPT}
+</task_context>
+
+<files_to_read>
+Read these files for context:
+${FILES_TO_READ}
+
+The Task tool will automatically load CLAUDE.md (project instructions and conventions) and .agents/skills/ (project-specific rules) into your context. Follow all project guidelines during execution.
+</files_to_read>
+
+Complete this task following GSD execution rules embedded in the task prompt. Return structured output with files modified, verification results, and any deviations from plan.
+",
+       description="Task ${PHASE}-${PLAN}-${TASK_NUM} (${SPECIALIST})"
+     ))
+
+     echo "✓ Specialist completed task" >&2
+
+     # Check for checkpoint in specialist output (pass through unchanged)
+     # Specialists use same checkpoint protocol as gsd-executor - no translation needed
+     if echo "$SPECIALIST_OUTPUT" | grep -q "## CHECKPOINT REACHED"; then
+       echo "→ Specialist returned checkpoint" >&2
+
+       # Log checkpoint occurrence
+       echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,$SPECIALIST,checkpoint" >> .planning/delegation.log
+
+       # Pass through unchanged (specialists use same checkpoint protocol)
+       echo "$SPECIALIST_OUTPUT"
+
+       # Exit - orchestrator handles continuation
+       return
+     fi
+
+     # Parse specialist output using result adapter
+     RESULT=$(gsd_result_adapter "$SPECIALIST_OUTPUT" "$TASK_FILES")
+
+     # Extract parsed fields for commit
+     FILES_MODIFIED=$(echo "$RESULT" | jq -r '.files_modified[]' 2>/dev/null || echo "$TASK_FILES")
+     VERIFICATION_STATUS=$(echo "$RESULT" | jq -r '.verification_status' 2>/dev/null || echo "completed")
+     COMMIT_MESSAGE=$(echo "$RESULT" | jq -r '.commit_message' 2>/dev/null || echo "feat(${PHASE}-${PLAN}): ${TASK_NAME}")
+
+     # Note: Specialist execution complete, proceed to commit step (section d below)
      ```
 
    - **If ROUTE_ACTION = "direct":**

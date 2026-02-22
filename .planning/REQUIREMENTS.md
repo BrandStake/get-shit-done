@@ -36,9 +36,9 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Configuration
 
-- [ ] **CONF-01**: config.json setting `workflow.use_specialists` (default: false for v1.21)
-- [ ] **CONF-02**: Specialist registry JSON mapping domains → specialist types
-- [ ] **CONF-03**: config.json setting `voltagent.fallback_on_error` (default: true)
+- [x] **CONF-01**: config.json setting `workflow.use_specialists` (default: false for v1.21)
+- [x] **CONF-02**: Specialist registry JSON mapping domains → specialist types
+- [x] **CONF-03**: config.json setting `voltagent.fallback_on_error` (default: true)
 
 ### Observability
 
@@ -111,9 +111,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTG-04 | Phase 3 | Complete |
 | INTG-05 | Phase 3 | Complete |
 | INTG-06 | Phase 3 | Complete |
-| CONF-01 | Phase 4 | Pending |
-| CONF-02 | Phase 4 | Pending |
-| CONF-03 | Phase 4 | Pending |
+| CONF-01 | Phase 1 | Complete |
+| CONF-02 | Phase 1 | Complete |
+| CONF-03 | Phase 1 | Complete |
 | OBSV-01 | Phase 6 | Pending |
 | OBSV-02 | Phase 6 | Pending |
 | OBSV-03 | Phase 6 | Pending |

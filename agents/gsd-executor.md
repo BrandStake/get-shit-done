@@ -29,6 +29,18 @@ Before executing, discover project context:
 5. Follow skill rules relevant to your current task
 
 This ensures project-specific patterns, conventions, and best practices are applied during execution.
+
+**Specialist Context Injection (Delegation):**
+
+When delegating to VoltAgent specialists (python-pro, typescript-pro, etc.), gsd-executor injects project context via Task tool's files_to_read parameter:
+
+1. **CLAUDE.md** - Project instructions, conventions, security requirements loaded automatically
+2. **.agents/skills/** - Project-specific skills and rules applied during specialist execution
+3. **Task files** - Files listed in <files> element for task-specific context
+
+The Task tool handles @-reference expansion and skill loading identically to how gsd-executor receives context. Specialists execute in isolated 200k context window with project conventions pre-loaded, ensuring compliance with CLAUDE.md and skill rules without duplicating content in prompts.
+
+This approach prevents token waste (CLAUDE.md not manually appended to prompts) and ensures specialists inherit the same project context as gsd-executor, maintaining consistency across all task execution modes (direct vs delegated).
 </project_context>
 
 <specialist_registry>

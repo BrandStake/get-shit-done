@@ -1252,6 +1252,74 @@ RESULT=$(gsd_result_adapter "$TEST_OUTPUT_2" "migrations/001.sql")
 - **Specialist output schema** - Define standard JSON format for specialists to return
 - **Adapter registry** - Specialist-specific adapters for known output patterns
 - **Validation layer** - Check that specialist actually modified expected files
+
+---
+
+**Delegation logging: log_delegation_decision()**
+
+Logs all routing decisions (delegated and direct) to .planning/delegation.log for observability and delegation pattern analysis.
+
+**Purpose:** Track which tasks are delegated vs executed directly, with reasons. Enables debugging "why wasn't this delegated?" and tuning routing thresholds.
+
+**Input:** Task number, task name, specialist name (or "none"), outcome
+
+**Output:** CSV line appended to .planning/delegation.log
+
+**Implementation:**
+
+```bash
+log_delegation_decision() {
+  local timestamp=$(date -u +"%Y-%m-%d,%H:%M:%S")
+  local plan_id="${PHASE}-${PLAN}"
+  local task_num="$1"
+  local task_name="$2"
+  local specialist="$3"
+  local outcome="$4"
+
+  # Escape quotes in task name for CSV
+  local escaped_name=$(echo "$task_name" | sed 's/"/\\"/g')
+
+  echo "$timestamp,$plan_id,Task $task_num,\"$escaped_name\",$specialist,$outcome" >> .planning/delegation.log
+}
+```
+
+**CSV format:**
+```
+timestamp,phase-plan,task,name,specialist,outcome
+2026-02-22,14:32:15,3-1,Task 1,"Implement FastAPI auth",python-pro,delegated
+2026-02-22,14:35:42,3-1,Task 2,"Update README",none,direct:complexity_threshold
+2026-02-22,14:38:19,3-1,Task 3,"Database migration",postgres-pro,direct:specialist_unavailable
+```
+
+**Outcome values:**
+- `delegated` - Task delegated to specialist successfully
+- `direct:no_domain_match` - No specialist matched task domain
+- `direct:complexity_threshold` - Task below delegation complexity threshold
+- `direct:specialist_unavailable` - Specialist not installed or available
+- `direct:checkpoint` - Checkpoint tasks always execute directly
+- `direct:use_specialists_disabled` - Delegation disabled in config
+
+**Query patterns:**
+```bash
+# All delegations: grep ",delegated$" .planning/delegation.log
+# Fallbacks: grep -v ",delegated$" .planning/delegation.log | tail -n +2
+# Specific specialist: grep ",python-pro," .planning/delegation.log
+# By phase-plan: grep "^[^,]*,3-1," .planning/delegation.log
+# Complexity threshold fallbacks: grep "direct:complexity_threshold" .planning/delegation.log
+```
+
+**Usage pattern:**
+```bash
+# After routing decision
+if [ "$ROUTE_ACTION" = "delegate" ]; then
+  SPECIALIST="$ROUTE_DETAIL"
+  log_delegation_decision "$TASK_NUM" "$TASK_NAME" "$SPECIALIST" "delegated"
+elif [ "$ROUTE_ACTION" = "direct" ]; then
+  log_delegation_decision "$TASK_NUM" "$TASK_NAME" "none" "$ROUTE_DECISION"
+fi
+```
+
+**Critical:** Log BOTH successful delegations AND fallback decisions. Fallback reasons are essential for understanding delegation patterns and tuning routing thresholds.
 </adapter_functions>
 
 <execution_flow>
@@ -1323,6 +1391,15 @@ grep -n "type=\"checkpoint" [plan-path]
 </step>
 
 <step name="execute_tasks">
+**Initialize delegation log** (before processing tasks):
+
+```bash
+# Initialize delegation log with CSV header if doesn't exist
+if [ ! -f .planning/delegation.log ]; then
+  echo "timestamp,phase-plan,task,name,specialist,outcome" > .planning/delegation.log
+fi
+```
+
 For each task:
 
 1. **If `type="auto"`:**
@@ -1383,13 +1460,13 @@ For each task:
    - Commit (see task_commit_protocol)
    - Track completion + commit hash for Summary
 
-   e. **Log delegation metadata for observability:**
+   e. **Log delegation decision for observability:**
    ```bash
-   # Append to phase-level delegation log for observability
+   # Log ALL routing decisions (delegated and direct) with full metadata
    if [ "$ROUTE_ACTION" = "delegate" ]; then
-     echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,$SPECIALIST,prepared" >> .planning/delegation.log
+     log_delegation_decision "$TASK_NUM" "$TASK_NAME" "$SPECIALIST" "delegated"
    elif [ "$ROUTE_ACTION" = "direct" ]; then
-     echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,none,$ROUTE_DETAIL" >> .planning/delegation.log
+     log_delegation_decision "$TASK_NUM" "$TASK_NAME" "none" "$ROUTE_DECISION"
    fi
    ```
 

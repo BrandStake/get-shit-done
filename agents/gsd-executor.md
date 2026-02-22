@@ -723,9 +723,111 @@ Adapter functions translate between GSD task format and specialist prompts, enab
 
 ---
 
+**Context pruning helper: prune_task_context()**
+
+Prunes verbose task descriptions to prevent token overflow while preserving essential information.
+
+**Input:** Task action description
+
+**Output:** Pruned action text (max 500 characters)
+
+**Implementation:**
+
+```bash
+prune_task_context() {
+  local task_action="$1"
+  local max_action_length=500
+
+  # Extract essential info, prune verbose descriptions
+  local pruned_action=""
+
+  if [ ${#task_action} -le $max_action_length ]; then
+    pruned_action="$task_action"
+  else
+    # Keep first 3 paragraphs (core requirements)
+    pruned_action=$(echo "$task_action" | sed -n '1,/^$/p; 2,/^$/p; 3,/^$/p')
+
+    # If still too long, truncate with ellipsis
+    if [ ${#pruned_action} -gt $max_action_length ]; then
+      pruned_action="${task_action:0:$max_action_length}..."
+    fi
+  fi
+
+  echo "$pruned_action"
+}
+```
+
+**GSD rule injection helper: generate_gsd_rules_section()**
+
+Generates standardized GSD execution rules for specialist prompts.
+
+**Output:** Heredoc with GSD execution rules and output format requirements
+
+**Implementation:**
+
+```bash
+generate_gsd_rules_section() {
+  cat <<'EOF'
+
+## GSD Execution Rules
+
+**CRITICAL:** You must follow these execution rules:
+
+1. **Atomic Commits Only**
+   - Commit ONLY files directly related to this task
+   - Use conventional commit format: `{type}(task-id): {description}`
+   - Types: feat, fix, test, refactor, chore
+
+2. **Report All Deviations**
+   - If you find bugs → fix them and report under "Rule 1 - Bug"
+   - If critical functionality missing → add it and report under "Rule 2 - Missing Critical"
+   - If task is blocked → fix blocker and report under "Rule 3 - Blocking Issue"
+
+3. **Structured Output Required**
+   - Provide results in JSON format (preferred) OR structured text
+   - Required fields: files_modified, verification_status, commit_message, deviations
+   - See output format below
+
+## Output Format
+
+**JSON Format (preferred):**
+```json
+{
+  "files_modified": ["path/to/file1.ext", "path/to/file2.ext"],
+  "verification_status": "passed",
+  "commit_message": "feat(task-01): implement feature X",
+  "deviations": [
+    {
+      "rule": "Rule 1 - Bug",
+      "description": "Fixed null pointer exception in handler",
+      "fix": "Added null check before processing"
+    }
+  ]
+}
+```
+
+**Text Format (fallback):**
+```
+FILES MODIFIED:
+- path/to/file1.ext
+- path/to/file2.ext
+
+VERIFICATION: passed
+
+COMMIT MESSAGE: feat(task-01): implement feature X
+
+DEVIATIONS:
+- [Rule 1 - Bug] Fixed null pointer exception in handler (Added null check)
+```
+EOF
+}
+```
+
+---
+
 **Task-to-Specialist adapter: gsd_task_adapter()**
 
-Converts a GSD task into a specialist-friendly prompt.
+Converts a GSD task into a specialist-friendly prompt with context pruning and GSD rule injection.
 
 **Input:** GSD task structure (name, files, action, verification, done criteria)
 
@@ -742,6 +844,20 @@ gsd_task_adapter() {
   local task_done="$5"
   local specialist="$6"
 
+  # Prune verbose task action to prevent token overflow
+  local pruned_action=$(prune_task_context "$task_action")
+
+  # Prune file list if too long (keep first 10)
+  local pruned_files="$task_files"
+  local file_count=$(echo "$task_files" | wc -l)
+  if [ "$file_count" -gt 10 ]; then
+    pruned_files=$(echo "$task_files" | head -n 10)
+    pruned_files="${pruned_files}\n... (and $((file_count - 10)) more files)"
+  fi
+
+  # Generate GSD rules section
+  local gsd_rules=$(generate_gsd_rules_section)
+
   # Build specialist prompt
   cat <<EOF
 You are a ${specialist} specialist. Please complete the following task:
@@ -750,10 +866,10 @@ You are a ${specialist} specialist. Please complete the following task:
 ${task_name}
 
 ## Files to modify
-${task_files}
+${pruned_files}
 
 ## What to do
-${task_action}
+${pruned_action}
 
 ## Verification
 After completing the task, verify your work by running:
@@ -763,12 +879,7 @@ ${task_verify}
 The task is complete when:
 ${task_done}
 
-## Output format
-Please provide:
-1. A summary of changes made
-2. List of files created or modified
-3. Verification results
-4. Any issues encountered or decisions made
+${gsd_rules}
 
 Work autonomously and follow best practices for ${specialist} development.
 EOF

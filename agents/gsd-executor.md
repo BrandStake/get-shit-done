@@ -1432,17 +1432,6 @@ For each task:
    ROUTE_DETAIL=$(echo "$ROUTE_DECISION" | cut -d: -f2)
 
    echo "→ ROUTE_DECISION: $ROUTE_DECISION"
-   ```
-
-   b. **Branch on routing decision:**
-
-   - **If ROUTE_ACTION = "delegate":**
-     ```bash
-     SPECIALIST="$ROUTE_DETAIL"
-     echo "→ Delegating task to: $SPECIALIST"
-
-     # Generate specialist prompt using adapter
-     SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
 
      # TODO (Phase 3): Invoke specialist via Task tool
      # SPECIALIST_OUTPUT=$(invoke_task_tool "$SPECIALIST" "$SPECIALIST_PROMPT")
@@ -1775,6 +1764,47 @@ After all tasks complete, create `{phase}-{plan}-SUMMARY.md` at `.planning/phase
 **Use template:** @~/.claude/get-shit-done/templates/summary.md
 
 **Frontmatter:** phase, plan, subsystem, tags, dependency graph (requires/provides/affects), tech-stack (added/patterns), key-files (created/modified), decisions, metrics (duration, completed date).
+
+**Specialist usage metadata** (conditionally included in frontmatter when tasks delegated):
+
+Calculate delegation ratio and generate specialist-usage section:
+
+```bash
+# Calculate delegation ratio
+TOTAL_TASKS=$((${#SPECIALIST_TASKS[@]} + DIRECT_TASK_COUNT))
+if [ $TOTAL_TASKS -gt 0 ]; then
+  DELEGATION_RATIO=$(( ${#SPECIALIST_TASKS[@]} * 100 / TOTAL_TASKS ))
+else
+  DELEGATION_RATIO=0
+fi
+
+# Generate specialist-usage frontmatter (only if tasks were delegated)
+if [ ${#SPECIALIST_TASKS[@]} -gt 0 ]; then
+  # Append to frontmatter YAML:
+  echo "specialist-usage:" >> frontmatter.tmp
+  for i in "${!SPECIALIST_TASKS[@]}"; do
+    echo "  - task: ${SPECIALIST_TASKS[$i]}" >> frontmatter.tmp
+    echo "    name: ${SPECIALIST_NAMES[$i]}" >> frontmatter.tmp
+    echo "    reason: \"${SPECIALIST_REASONS[$i]}\"" >> frontmatter.tmp
+    echo "    duration: ${SPECIALIST_DURATIONS[$i]}" >> frontmatter.tmp
+  done
+  echo "" >> frontmatter.tmp
+  echo "total-specialist-tasks: ${#SPECIALIST_TASKS[@]}" >> frontmatter.tmp
+  echo "total-direct-tasks: ${DIRECT_TASK_COUNT}" >> frontmatter.tmp
+  echo "delegation-ratio: ${DELEGATION_RATIO}%" >> frontmatter.tmp
+fi
+# If no delegation occurred, omit these fields entirely
+```
+
+**Specialist-usage frontmatter schema:**
+- `specialist-usage`: Array of delegation entries
+  - `task`: Task number delegated
+  - `name`: Specialist name (e.g., "python-pro")
+  - `reason`: Reason for delegation (from routing decision)
+  - `duration`: Task execution time (e.g., "45s")
+- `total-specialist-tasks`: Count of delegated tasks
+- `total-direct-tasks`: Count of directly executed tasks
+- `delegation-ratio`: Percentage of delegated tasks (0-100%)
 
 **Title:** `# Phase [X] Plan [Y]: [Name] Summary`
 

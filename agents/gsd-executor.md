@@ -582,6 +582,138 @@ Delegation adds 200-500ms overhead per task due to:
 This overhead is only worthwhile when specialist expertise provides clear value. Simple tasks (documentation, config tweaks, single-line fixes) should execute directly to maintain GSD's performance characteristics.
 
 **Logging:** The function outputs reasoning to stderr for observability. This helps debug delegation decisions and tune thresholds based on real-world usage patterns.
+
+---
+
+**Availability checking: check_specialist_availability()**
+
+Verifies that a specialist is actually installed before delegation. Returns "available" or "unavailable".
+
+**Implementation:**
+
+```bash
+check_specialist_availability() {
+  local specialist_name="$1"
+
+  # Check if specialist is in AVAILABLE_SPECIALISTS list
+  # (Populated by populate_available_specialists() during initialization)
+  if echo "$AVAILABLE_SPECIALISTS" | grep -q "\b$specialist_name\b"; then
+    echo "available"
+    return 0
+  fi
+
+  # Fallback: direct filesystem check if AVAILABLE_SPECIALISTS not populated
+  if [ -f "$HOME/.claude/agents/$specialist_name.md" ]; then
+    echo "available"
+    return 0
+  fi
+
+  echo "unavailable"
+  return 1
+}
+```
+
+**Usage pattern:**
+
+```bash
+SPECIALIST=$(detect_specialist_for_task "$TASK_DESC" "$TASK_FILES")
+
+if [ -n "$SPECIALIST" ]; then
+  AVAILABILITY=$(check_specialist_availability "$SPECIALIST")
+
+  if [ "$AVAILABILITY" = "available" ]; then
+    echo "Specialist $SPECIALIST is available for delegation"
+  else
+    echo "Specialist $SPECIALIST detected but not installed - falling back to direct execution"
+  fi
+fi
+```
+
+---
+
+**Routing decision: make_routing_decision()**
+
+Combines domain detection, availability checking, complexity evaluation, and feature flag to make final delegation routing decision.
+
+**Returns:** "delegate:{specialist-name}" or "direct:{reason}"
+
+**Implementation:**
+
+```bash
+make_routing_decision() {
+  local task_desc="$1"
+  local task_files="${2:-}"
+  local task_type="${3:-auto}"
+
+  # Check if specialist delegation is enabled
+  if [ "$USE_SPECIALISTS" != "true" ]; then
+    echo "direct:specialists_disabled"
+    echo "Routing: Direct execution (use_specialists=false)" >&2
+    return
+  fi
+
+  # Step 1: Detect specialist for domain
+  local specialist=$(detect_specialist_for_task "$task_desc" "$task_files")
+
+  if [ -z "$specialist" ]; then
+    echo "direct:no_domain_match"
+    echo "Routing: Direct execution (no specialist match)" >&2
+    return
+  fi
+
+  # Step 2: Check complexity threshold
+  local complexity_decision=$(should_delegate_task "$task_desc" "$task_files" "$specialist" "$task_type")
+
+  if [ "$complexity_decision" != "delegate" ]; then
+    echo "direct:complexity_threshold"
+    echo "Routing: Direct execution (complexity threshold not met)" >&2
+    return
+  fi
+
+  # Step 3: Check specialist availability
+  local availability=$(check_specialist_availability "$specialist")
+
+  if [ "$availability" != "available" ]; then
+    echo "direct:specialist_unavailable"
+    echo "Routing: Direct execution ($specialist not installed)" >&2
+    return
+  fi
+
+  # All criteria met - delegate
+  echo "delegate:$specialist"
+  echo "Routing: Delegating to $specialist (domain match, complexity met, available)" >&2
+}
+```
+
+**Usage in execute_tasks flow:**
+
+```bash
+# For each task, make routing decision
+ROUTE_DECISION=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "$TASK_TYPE")
+ROUTE_ACTION=$(echo "$ROUTE_DECISION" | cut -d: -f1)
+ROUTE_DETAIL=$(echo "$ROUTE_DECISION" | cut -d: -f2)
+
+if [ "$ROUTE_ACTION" = "delegate" ]; then
+  SPECIALIST="$ROUTE_DETAIL"
+  echo "→ Task will be delegated to: $SPECIALIST"
+  # Proceed to adapter and delegation (Phase 3)
+else
+  echo "→ Task will be executed directly: $ROUTE_DETAIL"
+  # Execute directly with existing GSD logic
+fi
+```
+
+**Decision flow:**
+
+1. **Feature flag check** - Is `use_specialists` enabled? (No → direct)
+2. **Domain detection** - Is there a matching specialist? (No → direct)
+3. **Complexity evaluation** - Does task meet thresholds? (No → direct)
+4. **Availability check** - Is specialist installed? (No → direct with fallback)
+5. **All criteria met** - Delegate to specialist
+
+**Observability:** All routing decisions logged to stderr with reasoning for debugging and tuning.
+
+**Graceful degradation:** System falls back to direct execution at any decision point failure, preserving GSD's reliability guarantees.
 </domain_detection>
 
 <execution_flow>

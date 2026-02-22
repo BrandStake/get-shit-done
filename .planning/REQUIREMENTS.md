@@ -42,9 +42,9 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Observability
 
-- [ ] **OBSV-01**: Structured logging of delegation decisions (timestamp, specialist, task, reason)
-- [ ] **OBSV-02**: Logging captured in SUMMARY.md "Specialist Delegation" section
-- [ ] **OBSV-03**: Fallback occurrences logged with reason
+- [x] **OBSV-01**: Structured logging of delegation decisions (timestamp, specialist, task, reason)
+- [x] **OBSV-02**: Logging captured in SUMMARY.md "Specialist Delegation" section
+- [x] **OBSV-03**: Fallback occurrences logged with reason
 
 ### Specialist Support
 
@@ -114,9 +114,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONF-01 | Phase 1 | Complete |
 | CONF-02 | Phase 1 | Complete |
 | CONF-03 | Phase 1 | Complete |
-| OBSV-01 | Phase 6 | Pending |
-| OBSV-02 | Phase 6 | Pending |
-| OBSV-03 | Phase 6 | Pending |
+| OBSV-01 | Phase 3 | Complete |
+| OBSV-02 | Phase 3 | Complete |
+| OBSV-03 | Phase 3 | Complete |
 | SPEC-01 | Phase 1 | Complete |
 | SPEC-02 | Phase 1 | Complete |
 | SPEC-03 | Phase 1 | Complete |

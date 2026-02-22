@@ -18,12 +18,12 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Adapter Layer
 
-- [ ] **ADPT-01**: gsd-task-adapter translates GSD PLAN.md task → specialist prompt
-- [ ] **ADPT-02**: gsd-task-adapter prunes context (essential subset, not full state dump)
-- [ ] **ADPT-03**: gsd-task-adapter injects GSD rules ("atomic commits only, report deviations")
-- [ ] **ADPT-04**: gsd-result-adapter parses specialist output → GSD completion format
-- [ ] **ADPT-05**: gsd-result-adapter validates structured output schema (files_modified, deviations, commit_message)
-- [ ] **ADPT-06**: gsd-result-adapter extracts deviations from specialist output
+- [x] **ADPT-01**: gsd-task-adapter translates GSD PLAN.md task → specialist prompt
+- [x] **ADPT-02**: gsd-task-adapter prunes context (essential subset, not full state dump)
+- [x] **ADPT-03**: gsd-task-adapter injects GSD rules ("atomic commits only, report deviations")
+- [x] **ADPT-04**: gsd-result-adapter parses specialist output → GSD completion format
+- [x] **ADPT-05**: gsd-result-adapter validates structured output schema (files_modified, deviations, commit_message)
+- [x] **ADPT-06**: gsd-result-adapter extracts deviations from specialist output
 
 ### Integration
 
@@ -99,12 +99,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DLGT-04 | Phase 3 | Pending |
 | DLGT-05 | Phase 1 | Complete |
 | DLGT-06 | Phase 3 | Pending |
-| ADPT-01 | Phase 2 | Pending |
-| ADPT-02 | Phase 2 | Pending |
-| ADPT-03 | Phase 2 | Pending |
-| ADPT-04 | Phase 2 | Pending |
-| ADPT-05 | Phase 2 | Pending |
-| ADPT-06 | Phase 2 | Pending |
+| ADPT-01 | Phase 2 | Complete |
+| ADPT-02 | Phase 2 | Complete |
+| ADPT-03 | Phase 2 | Complete |
+| ADPT-04 | Phase 2 | Complete |
+| ADPT-05 | Phase 2 | Complete |
+| ADPT-06 | Phase 2 | Complete |
 | INTG-01 | Phase 3 | Pending |
 | INTG-02 | Phase 3 | Pending |
 | INTG-03 | Phase 3 | Pending |

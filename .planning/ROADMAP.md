@@ -13,7 +13,7 @@ This milestone transforms GSD from a single generalist executor to a hybrid team
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation - Detection & Routing** - Domain detection, availability checks, and fallback hierarchy
-- [ ] **Phase 2: Adapters - Context Translation** - Translate GSD tasks to specialist prompts and parse results
+- [x] **Phase 2: Adapters - Context Translation** - Translate GSD tasks to specialist prompts and parse results
 - [ ] **Phase 3: Integration - Wiring & Delegation** - End-to-end delegation flow with Task tool invocation
 - [ ] **Phase 4: Configuration - Settings & Registry** - Config schema, specialist registry, and feature flags
 - [ ] **Phase 5: Testing - Validation & Edge Cases** - Integration tests, backward compatibility, fallback validation
@@ -52,9 +52,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Enhance task adapter with context pruning and GSD rule injection
-- [ ] 02-02-PLAN.md — Enhance result adapter with multi-layer parsing and deviation extraction
-- [ ] 02-03-PLAN.md — Comprehensive test suite for adapter robustness
+- [x] 02-01-PLAN.md — Enhance task adapter with context pruning and GSD rule injection
+- [x] 02-02-PLAN.md — Enhance result adapter with multi-layer parsing and deviation extraction
+- [x] 02-03-PLAN.md — Comprehensive test suite for adapter robustness
 
 ### Phase 3: Integration - Wiring & Delegation
 **Goal**: gsd-executor orchestrates end-to-end delegation flow from task routing to specialist execution to state updates
@@ -129,8 +129,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation - Detection & Routing | 4/4 | Complete | 2026-02-22 |
-| 2. Adapters - Context Translation | 0/3 | Ready to execute | - |
-| 3. Integration - Wiring & Delegation | 0/TBD | Not started | - |
+| 2. Adapters - Context Translation | 3/3 | Complete | 2026-02-22 |
+| 3. Integration - Wiring & Delegation | 0/TBD | Ready to execute | - |
 | 4. Configuration - Settings & Registry | 0/TBD | Not started | - |
 | 5. Testing - Validation & Edge Cases | 0/TBD | Not started | - |
 | 6. Observability - Logging & Metrics | 0/TBD | Not started | - |

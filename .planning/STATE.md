@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-22)
 ## Current Position
 
 Phase: 1 of 6 (Foundation - Detection & Routing)
-Plan: 3 of 6 in current phase
-Status: In progress
-Last activity: 2026-02-22 — Completed 01-03-PLAN.md (Routing & Delegation Foundation)
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-02-22 — Completed 01-04-PLAN.md (Validation & Testing)
 
-Progress: [███░░░░░░░] 25% (3/12 plans complete)
+Progress: [████░░░░░░] 33% (4/12 plans complete)
 
 ## Accumulated Context
 
@@ -23,6 +23,9 @@ Progress: [███░░░░░░░] 25% (3/12 plans complete)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Consolidated test suite structure (01-04) - Single comprehensive test file instead of multiple scattered files for easier maintenance
+- Word boundary patterns for short keywords (01-04) - Add \b to 2-3 letter keywords to prevent false positive substring matches
+- Extract functions from markdown for testing (01-04) - Tests validate actual implementation in gsd-executor.md, not duplicates
 - Four-stage routing decision with fail-fast (01-03) - Check feature flag → domain → complexity → availability in sequence for early exit and better observability
 - Heuristic parsing with fallback strategies (01-03) - Specialist output varies, pattern matching more robust than strict parsing
 - Delegation logging to .planning/delegation.log (01-03) - Track delegation attempts, success rates, failure patterns for tuning thresholds
@@ -48,9 +51,10 @@ None yet.
 | 01-01 | 4min | 3 | 1 | Domain detection with keyword pattern matching |
 | 01-02 | 154s | 3 | 3 | Specialist configuration and dynamic registry |
 | 01-03 | 193s | 3 | 1 | Routing logic, adapters, execute_tasks integration |
+| 01-04 | 406s | 2 | 2 | Comprehensive test suite (49 tests), bug fixes |
 
 ## Session Info
 
-Last session: 2026-02-22T19:49:32Z
-Stopped at: Completed 01-03-PLAN.md (Routing & Delegation Foundation)
+Last session: 2026-02-22T20:00:16Z
+Stopped at: Completed 01-04-PLAN.md (Validation & Testing) - Phase 1 complete
 Resume file: None

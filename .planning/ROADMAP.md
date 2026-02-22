@@ -12,7 +12,7 @@ This milestone transforms GSD from a single generalist executor to a hybrid team
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation - Detection & Routing** - Domain detection, availability checks, and fallback hierarchy
+- [x] **Phase 1: Foundation - Detection & Routing** - Domain detection, availability checks, and fallback hierarchy
 - [ ] **Phase 2: Adapters - Context Translation** - Translate GSD tasks to specialist prompts and parse results
 - [ ] **Phase 3: Integration - Wiring & Delegation** - End-to-end delegation flow with Task tool invocation
 - [ ] **Phase 4: Configuration - Settings & Registry** - Config schema, specialist registry, and feature flags
@@ -36,8 +36,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Domain detection patterns and specialist registry mapping
 - [x] 01-02-PLAN.md — Configuration schema with feature flags and fallback settings
-- [ ] 01-03-PLAN.md — Availability checking, routing logic, and adapter functions
-- [ ] 01-04-PLAN.md — End-to-end testing and backward compatibility validation
+- [x] 01-03-PLAN.md — Availability checking, routing logic, and adapter functions
+- [x] 01-04-PLAN.md — End-to-end testing and backward compatibility validation
 
 ### Phase 2: Adapters - Context Translation
 **Goal**: gsd-executor can translate GSD task format to specialist prompts and parse specialist output back to GSD format

@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-22)
 ## Current Position
 
 Phase: 3 of 6 (Integration - Wiring & Delegation)
-Plan: 2 of TBD in current phase
+Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-22 — Completed 03-02-PLAN.md
+Last activity: 2026-02-22 — Completed 03-03-PLAN.md
 
 Progress: [████░░░░░░] 33% (2/6 phases complete)
 
@@ -23,6 +23,10 @@ Progress: [████░░░░░░] 33% (2/6 phases complete)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- CSV format for delegation.log (03-03) - Simple, grep-friendly, no dependencies, sufficient for MVP observability
+- Log both delegated and direct decisions (03-03) - "Why wasn't this delegated?" crucial for tuning routing thresholds
+- Single-writer pattern enforcement (03-03) - Only gsd-executor writes STATE.md, ROADMAP.md, REQUIREMENTS.md to prevent 36.94% of coordination failures
+- Prompt-based READ-ONLY enforcement (03-03) - Specialists receive state files as READ-ONLY via prompts, return structured output
 - Use Git Co-authored-by trailers for specialist attribution (03-02) - GitHub/GitLab parseable standard format
 - Email domain specialist@voltagent for all VoltAgent specialists (03-02) - Identifies specialist co-authors
 - Conditionally omit specialist-usage frontmatter when no delegation (03-02) - Clean YAML, no empty arrays
@@ -71,9 +75,10 @@ None yet.
 | 02-02 | 203s | 3 | 1 | Multi-layer parsing, schema validation, deviation extraction |
 | 02-03 | 10min | 3 | 1 | Comprehensive adapter test suite (87 tests), ADPT validation |
 | 03-02 | 4min | 3 | 1 | Co-authored commits and SUMMARY.md specialist metadata |
+| 03-03 | 6min | 3 | 1 | Delegation logging and single-writer state ownership pattern |
 
 ## Session Info
 
-Last session: 2026-02-22T20:59:37Z
-Stopped at: Completed 03-02-PLAN.md (Co-Authored Commits & SUMMARY.md Metadata)
+Last session: 2026-02-22T21:01:06Z
+Stopped at: Completed 03-03-PLAN.md (Delegation Logging & State Enforcement)
 Resume file: None

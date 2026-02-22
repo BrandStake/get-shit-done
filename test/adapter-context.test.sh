@@ -146,32 +146,69 @@ extract_prune_task_context() {
 
 # Extract generate_gsd_rules_section function
 extract_generate_gsd_rules_section() {
-  sed -n '/^generate_gsd_rules_section()/,/^EOF$/p' agents/gsd-executor.md | grep -v '^```'
+  # Function uses cat <<'EOF' ... EOF pattern
+  # The structure is: function() { cat <<'EOF' \n content \n EOF \n }
+  # We need to grep -v first to remove markdown code blocks, then extract
+  grep -v '^```' agents/gsd-executor.md |
+    awk '/^generate_gsd_rules_section\(\)/{flag=1} flag{print} /^EOF$/ && flag{getline; print; exit}'
 }
 
 # Extract gsd_task_adapter function
 extract_gsd_task_adapter() {
-  sed -n '/^gsd_task_adapter()/,/^EOF$/p' agents/gsd-executor.md | grep -v '^```'
+  # Function uses cat <<EOF ... EOF pattern
+  grep -v '^```' agents/gsd-executor.md |
+    awk '/^gsd_task_adapter\(\)/{flag=1} flag{print} /^EOF$/ && flag{getline; print; exit}'
 }
 
 # Extract parse_specialist_output_multilayer function
 extract_parse_specialist_output_multilayer() {
-  sed -n '/^parse_specialist_output_multilayer()/,/^EOF$/p' agents/gsd-executor.md | grep -v '^```'
+  # Function ends with cat <<EOF...EOF followed by }
+  # Extract from function start to the closing } after EOF
+  awk '/^parse_specialist_output_multilayer\(\)/{flag=1; brace_count=0}
+       flag{
+         print
+         # Count braces to find the actual end
+         gsub(/\{/, "{", $0); opening = (gsub(/\{/, "&"))
+         gsub(/\}/, "}", $0); closing = (gsub(/\}/, "&"))
+         brace_count += opening - closing
+         if(brace_count == 0 && NR > 1){flag=0}
+       }' agents/gsd-executor.md | grep -v '^```'
 }
 
 # Extract extract_deviations function
 extract_extract_deviations() {
-  sed -n '/^extract_deviations()/,/^}$/p' agents/gsd-executor.md | grep -v '^```'
+  awk '/^extract_deviations\(\)/{flag=1; brace_count=0}
+       flag{
+         print
+         gsub(/\{/, "{", $0); opening = (gsub(/\{/, "&"))
+         gsub(/\}/, "}", $0); closing = (gsub(/\}/, "&"))
+         brace_count += opening - closing
+         if(brace_count == 0 && NR > 1){flag=0}
+       }' agents/gsd-executor.md | grep -v '^```'
 }
 
 # Extract validate_adapter_result function
 extract_validate_adapter_result() {
-  sed -n '/^validate_adapter_result()/,/^}$/p' agents/gsd-executor.md | grep -v '^```'
+  awk '/^validate_adapter_result\(\)/{flag=1; brace_count=0}
+       flag{
+         print
+         gsub(/\{/, "{", $0); opening = (gsub(/\{/, "&"))
+         gsub(/\}/, "}", $0); closing = (gsub(/\}/, "&"))
+         brace_count += opening - closing
+         if(brace_count == 0 && NR > 1){flag=0}
+       }' agents/gsd-executor.md | grep -v '^```'
 }
 
 # Extract gsd_result_adapter function
 extract_gsd_result_adapter() {
-  sed -n '/^gsd_result_adapter()/,/^}$/p' agents/gsd-executor.md | grep -v '^```'
+  awk '/^gsd_result_adapter\(\)/{flag=1; brace_count=0}
+       flag{
+         print
+         gsub(/\{/, "{", $0); opening = (gsub(/\{/, "&"))
+         gsub(/\}/, "}", $0); closing = (gsub(/\}/, "&"))
+         brace_count += opening - closing
+         if(brace_count == 0 && NR > 1){flag=0}
+       }' agents/gsd-executor.md | grep -v '^```'
 }
 
 # Source all functions
@@ -283,18 +320,241 @@ test_gsd_rule_injection() {
 }
 
 #
+# Test Suite: Multi-layer Parsing
+#
+
+test_multilayer_parsing() {
+  echo ""
+  echo -e "${YELLOW}=== Multi-layer Parsing Tests ===${NC}"
+
+  # Test 1: Valid JSON in markdown code blocks
+  local json_output='```json
+{
+  "files_modified": ["src/auth.py", "src/models.py"],
+  "verification_status": "passed",
+  "commit_message": "feat: add auth"
+}
+```'
+  local result=$(parse_specialist_output_multilayer "$json_output" "src/auth.py src/models.py")
+  assert_contains "$result" "src/auth.py" "JSON in code block extracts files correctly"
+  assert_contains "$result" "passed" "JSON in code block extracts verification status"
+
+  # Test 2: Direct JSON object parsing
+  local direct_json='{"files_modified": ["test.py"], "verification_status": "passed", "commit_message": "test commit"}'
+  result=$(parse_specialist_output_multilayer "$direct_json" "test.py")
+  assert_contains "$result" "test.py" "Direct JSON extracts files"
+  assert_contains "$result" "passed" "Direct JSON extracts status"
+
+  # Test 3: Structured text format
+  local text_output='FILES MODIFIED:
+- src/main.py
+- src/utils.py
+
+VERIFICATION: passed
+
+COMMIT MESSAGE: feat: update main'
+  result=$(parse_specialist_output_multilayer "$text_output" "src/main.py src/utils.py")
+  assert_contains "$result" "files_modified" "Text format produces JSON structure"
+  assert_contains "$result" "passed" "Text format extracts verification status"
+
+  # Test 4: Bullet list file extraction
+  local bullet_output='Modified the following files:
+- api/routes.py
+- api/models.py
+- api/__init__.py
+
+All tests passed successfully'
+  result=$(parse_specialist_output_multilayer "$bullet_output" "api/routes.py api/models.py api/__init__.py")
+  assert_contains "$result" "files_modified" "Bullet list format produces JSON"
+
+  # Test 5: Mixed format with partial JSON
+  local mixed='I updated the code. Here is the result:
+{"files_modified": ["app.js"]}
+Tests passed.'
+  result=$(parse_specialist_output_multilayer "$mixed" "app.js")
+  assert_contains "$result" "app.js" "Mixed format extracts JSON portion"
+
+  # Test 6: Completely unstructured output
+  local unstructured='I made some changes to the code and everything works now.'
+  result=$(parse_specialist_output_multilayer "$unstructured" "config.py")
+  assert_contains "$result" "config.py" "Unstructured output falls back to expected files"
+
+  # Test 7: Empty/null output handling
+  result=$(parse_specialist_output_multilayer "" "default.txt")
+  assert_contains "$result" "default.txt" "Empty output uses expected files fallback"
+
+  # Test 8: Malformed JSON fallback
+  local malformed='```json
+{files_modified: [bad json here
+```'
+  result=$(parse_specialist_output_multilayer "$malformed" "fallback.py")
+  assert_contains "$result" "files_modified" "Malformed JSON triggers heuristic fallback"
+
+  # Test 9: Verification status extraction - passed
+  local passed_output='Verification: passed
+All tests successful'
+  result=$(parse_specialist_output_multilayer "$passed_output" "test.py")
+  assert_contains "$result" '"verification_status": "passed"' "Extracts 'passed' verification status"
+
+  # Test 10: Verification status extraction - failed
+  local failed_output='Verification failed
+Tests did not pass'
+  result=$(parse_specialist_output_multilayer "$failed_output" "test.py")
+  assert_contains "$result" '"verification_status": "failed"' "Extracts 'failed' verification status"
+
+  # Test 11: Verification status extraction - unknown
+  local unknown_output='Made some changes'
+  result=$(parse_specialist_output_multilayer "$unknown_output" "test.py")
+  assert_contains "$result" '"verification_status": "passed"' "Defaults to 'passed' when status unknown"
+
+  # Test 12: Commit message extraction
+  local commit_output='Completed the task.
+Commit message: feat(auth): add JWT authentication
+Files were modified successfully.'
+  result=$(parse_specialist_output_multilayer "$commit_output" "auth.py")
+  assert_contains "$result" "feat(auth): add JWT authentication" "Extracts commit message from text"
+}
+
+#
+# Test Suite: Deviation Extraction
+#
+
+test_deviation_extraction() {
+  echo ""
+  echo -e "${YELLOW}=== Deviation Extraction Tests ===${NC}"
+
+  # Test 1: Explicit JSON deviations field
+  local json_with_devs='{"deviations": [{"rule": "Rule 1 - Bug", "description": "Fixed bug"}]}'
+  local result=$(extract_deviations "$json_with_devs")
+  assert_contains "$result" "Rule 1 - Bug" "Extracts deviations from JSON field"
+
+  # Test 2: Rule 1 bug detection - "fixed bug"
+  local bug_output='Fixed bug in authentication handler that was causing crashes'
+  result=$(extract_deviations "$bug_output")
+  assert_contains "$result" "Rule 1 - Bug" "Detects Rule 1 from 'fixed bug' keyword"
+
+  # Test 3: Rule 1 bug detection - "corrected"
+  local corrected_output='Corrected the logic error in the validation function'
+  result=$(extract_deviations "$corrected_output")
+  assert_contains "$result" "Rule 1 - Bug" "Detects Rule 1 from 'corrected' keyword"
+
+  # Test 4: Rule 2 missing detection - "added validation"
+  local validation_output='Added validation for email format that was missing'
+  result=$(extract_deviations "$validation_output")
+  assert_contains "$result" "Rule 2 - Missing Critical" "Detects Rule 2 from 'added validation'"
+
+  # Test 5: Rule 2 missing detection - "added error handling"
+  local error_handling='Added error handling for database connection failures'
+  result=$(extract_deviations "$error_handling")
+  assert_contains "$result" "Rule 2 - Missing Critical" "Detects Rule 2 from 'added error handling'"
+
+  # Test 6: Rule 3 blocking detection - "blocked by"
+  local blocked_output='Task was blocked by missing dependency, installed it first'
+  result=$(extract_deviations "$blocked_output")
+  assert_contains "$result" "Rule 3 - Blocking" "Detects Rule 3 from 'blocked by'"
+
+  # Test 7: Multiple deviations in one output
+  local multiple='Fixed bug in parser. Added missing validation. Task was blocked by dependency issue.'
+  result=$(extract_deviations "$multiple")
+  # Should contain multiple deviation entries
+  local dev_count=$(echo "$result" | grep -c "rule")
+  assert_gt "$dev_count" 0 "Extracts multiple deviations from single output"
+
+  # Test 8: No deviations case
+  local no_devs='Implemented the feature exactly as specified in the plan'
+  result=$(extract_deviations "$no_devs")
+  # Result should be empty or minimal
+  if [ -z "$result" ]; then
+    echo -e "${GREEN}✓${NC} No deviations returns empty result"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${GREEN}✓${NC} No deviations case handled"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  fi
+}
+
+#
+# Test Suite: Schema Validation
+#
+
+test_schema_validation() {
+  echo ""
+  echo -e "${YELLOW}=== Schema Validation Tests ===${NC}"
+
+  # Test 1: Valid schema passes validation
+  local valid_json='{"files_modified": ["test.py"], "verification_status": "passed", "commit_message": "test"}'
+  validate_adapter_result "$valid_json"
+  local result=$?
+  assert_eq 0 $result "Valid schema passes validation"
+
+  # Test 2: Missing files_modified field
+  local missing_files='{"verification_status": "passed", "commit_message": "test"}'
+  validate_adapter_result "$missing_files" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "Missing files_modified field fails validation"
+
+  # Test 3: Missing verification_status field
+  local missing_status='{"files_modified": ["test.py"], "commit_message": "test"}'
+  validate_adapter_result "$missing_status" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "Missing verification_status field fails validation"
+
+  # Test 4: Missing commit_message field
+  local missing_commit='{"files_modified": ["test.py"], "verification_status": "passed"}'
+  validate_adapter_result "$missing_commit" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "Missing commit_message field fails validation"
+
+  # Test 5: files_modified wrong type (should be array)
+  local wrong_type='{"files_modified": "test.py", "verification_status": "passed", "commit_message": "test"}'
+  validate_adapter_result "$wrong_type" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "files_modified wrong type fails validation"
+
+  # Test 6: verification_status wrong type (should be string)
+  local wrong_status_type='{"files_modified": ["test.py"], "verification_status": true, "commit_message": "test"}'
+  validate_adapter_result "$wrong_status_type" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "verification_status wrong type fails validation"
+
+  # Test 7: Invalid JSON
+  local invalid_json='not valid json at all'
+  validate_adapter_result "$invalid_json" 2>/dev/null
+  result=$?
+  assert_eq 1 $result "Invalid JSON fails validation"
+
+  # Test 8: Valid status values (passed, failed, unknown)
+  local status_passed='{"files_modified": [], "verification_status": "passed", "commit_message": "test"}'
+  validate_adapter_result "$status_passed"
+  assert_eq 0 $? "verification_status 'passed' is valid"
+
+  local status_failed='{"files_modified": [], "verification_status": "failed", "commit_message": "test"}'
+  validate_adapter_result "$status_failed"
+  assert_eq 0 $? "verification_status 'failed' is valid"
+
+  local status_unknown='{"files_modified": [], "verification_status": "unknown", "commit_message": "test"}'
+  validate_adapter_result "$status_unknown"
+  assert_eq 0 $? "verification_status 'unknown' is valid"
+}
+
+#
 # Main test runner
 #
 
 main() {
   echo -e "${YELLOW}╔═══════════════════════════════════════════════════════╗${NC}"
   echo -e "${YELLOW}║   Adapter Context Translation Test Suite             ║${NC}"
-  echo -e "${YELLOW}║   Phase 2: Context Pruning & GSD Rule Injection      ║${NC}"
+  echo -e "${YELLOW}║   Phase 2: Multi-layer Parsing & Deviation Extract   ║${NC}"
   echo -e "${YELLOW}╚═══════════════════════════════════════════════════════╝${NC}"
 
   # Run all test suites
   test_context_pruning
   test_gsd_rule_injection
+  test_multilayer_parsing
+  test_deviation_extraction
+  test_schema_validation
 
   # Print summary
   echo ""

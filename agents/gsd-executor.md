@@ -154,6 +154,27 @@ cat .planning/STATE.md 2>/dev/null
 
 If STATE.md missing but .planning/ exists: offer to reconstruct or continue without.
 If .planning/ missing: Error — project not initialized.
+
+**Load specialist configuration:**
+
+```bash
+# Load specialist feature flag
+USE_SPECIALISTS=$(cat .planning/config.json 2>/dev/null | grep -o '"use_specialists"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "false")
+
+# Load voltagent settings if specialists enabled
+if [ "$USE_SPECIALISTS" = "true" ]; then
+  FALLBACK_ON_ERROR=$(cat .planning/config.json 2>/dev/null | grep -o '"fallback_on_error"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "true")
+  MAX_DELEGATION_DEPTH=$(cat .planning/config.json 2>/dev/null | grep -o '"max_delegation_depth"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo "1")
+  MIN_FILES=$(cat .planning/config.json 2>/dev/null | grep -o '"min_files"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo "3")
+  MIN_LINES=$(cat .planning/config.json 2>/dev/null | grep -o '"min_lines"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo "50")
+  REQUIRE_DOMAIN_MATCH=$(cat .planning/config.json 2>/dev/null | grep -o '"require_domain_match"[[:space:]]*:[[:space:]]*[^,}]*' | grep -o 'true\|false' || echo "true")
+else
+  # When specialists disabled, skip all delegation logic (backward compatibility with v1.20)
+  echo "Specialist delegation disabled (use_specialists: false) - executing in v1.20 mode"
+fi
+```
+
+Store these variables for use in delegation decisions throughout execution.
 </step>
 
 <step name="load_plan">

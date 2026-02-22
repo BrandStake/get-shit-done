@@ -1391,20 +1391,32 @@ grep -n "type=\"checkpoint" [plan-path]
 </step>
 
 <step name="execute_tasks">
-**Initialize delegation log** (before processing tasks):
+**Initialize delegation log and specialist tracking** (before processing tasks):
 
 ```bash
 # Initialize delegation log with CSV header if doesn't exist
 if [ ! -f .planning/delegation.log ]; then
   echo "timestamp,phase-plan,task,name,specialist,outcome" > .planning/delegation.log
 fi
+
+# Specialist metadata tracking for SUMMARY.md
+SPECIALIST_TASKS=()     # Array of task numbers delegated
+SPECIALIST_NAMES=()     # Array of specialist names
+SPECIALIST_REASONS=()   # Array of reasons (from routing decision)
+SPECIALIST_DURATIONS=() # Array of task durations
+DIRECT_TASK_COUNT=0     # Counter for direct executions
 ```
 
 For each task:
 
 1. **If `type="auto"`:**
 
-   a. **Make routing decision:**
+   a. **Record task start time:**
+   ```bash
+   TASK_START=$(date +%s)
+   ```
+
+   b. **Make routing decision:**
    ```bash
    # Extract task details
    TASK_NAME="[task name from PLAN.md]"
@@ -1460,7 +1472,33 @@ For each task:
    - Commit (see task_commit_protocol)
    - Track completion + commit hash for Summary
 
-   e. **Log delegation decision for observability:**
+   e. **Record specialist usage metadata:**
+   ```bash
+   # Calculate task duration
+   TASK_END=$(date +%s)
+   TASK_DURATION=$((TASK_END - TASK_START))
+
+   # Track specialist metadata for SUMMARY.md
+   if [ "$ROUTE_ACTION" = "delegate" ]; then
+     SPECIALIST_TASKS+=("$TASK_NUM")
+     SPECIALIST_NAMES+=("$SPECIALIST")
+
+     # Extract reason from routing decision
+     # Format: "delegate:python-pro:Python domain expertise"
+     # We want everything after the second colon
+     REASON=$(echo "$ROUTE_DECISION" | cut -d: -f3-)
+     if [ -z "$REASON" ]; then
+       # Fallback if no reason provided in routing decision
+       REASON="${SPECIALIST} domain expertise"
+     fi
+     SPECIALIST_REASONS+=("$REASON")
+     SPECIALIST_DURATIONS+=("${TASK_DURATION}s")
+   else
+     DIRECT_TASK_COUNT=$((DIRECT_TASK_COUNT + 1))
+   fi
+   ```
+
+   f. **Log delegation decision for observability:**
    ```bash
    # Log ALL routing decisions (delegated and direct) with full metadata
    if [ "$ROUTE_ACTION" = "delegate" ]; then

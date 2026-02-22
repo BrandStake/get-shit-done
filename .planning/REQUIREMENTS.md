@@ -93,39 +93,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DLGT-01 | — | Pending |
-| DLGT-02 | — | Pending |
-| DLGT-03 | — | Pending |
-| DLGT-04 | — | Pending |
-| DLGT-05 | — | Pending |
-| DLGT-06 | — | Pending |
-| ADPT-01 | — | Pending |
-| ADPT-02 | — | Pending |
-| ADPT-03 | — | Pending |
-| ADPT-04 | — | Pending |
-| ADPT-05 | — | Pending |
-| ADPT-06 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
-| INTG-03 | — | Pending |
-| INTG-04 | — | Pending |
-| INTG-05 | — | Pending |
-| INTG-06 | — | Pending |
-| CONF-01 | — | Pending |
-| CONF-02 | — | Pending |
-| CONF-03 | — | Pending |
-| OBSV-01 | — | Pending |
-| OBSV-02 | — | Pending |
-| OBSV-03 | — | Pending |
-| SPEC-01 | — | Pending |
-| SPEC-02 | — | Pending |
-| SPEC-03 | — | Pending |
+| DLGT-01 | Phase 1 | Pending |
+| DLGT-02 | Phase 1 | Pending |
+| DLGT-03 | Phase 1 | Pending |
+| DLGT-04 | Phase 3 | Pending |
+| DLGT-05 | Phase 1 | Pending |
+| DLGT-06 | Phase 3 | Pending |
+| ADPT-01 | Phase 2 | Pending |
+| ADPT-02 | Phase 2 | Pending |
+| ADPT-03 | Phase 2 | Pending |
+| ADPT-04 | Phase 2 | Pending |
+| ADPT-05 | Phase 2 | Pending |
+| ADPT-06 | Phase 2 | Pending |
+| INTG-01 | Phase 3 | Pending |
+| INTG-02 | Phase 3 | Pending |
+| INTG-03 | Phase 3 | Pending |
+| INTG-04 | Phase 3 | Pending |
+| INTG-05 | Phase 3 | Pending |
+| INTG-06 | Phase 3 | Pending |
+| CONF-01 | Phase 4 | Pending |
+| CONF-02 | Phase 4 | Pending |
+| CONF-03 | Phase 4 | Pending |
+| OBSV-01 | Phase 6 | Pending |
+| OBSV-02 | Phase 6 | Pending |
+| OBSV-03 | Phase 6 | Pending |
+| SPEC-01 | Phase 1 | Pending |
+| SPEC-02 | Phase 1 | Pending |
+| SPEC-03 | Phase 1 | Pending |
 
 **Coverage:**
 - v1.21 requirements: 27 total
-- Mapped to phases: 0
-- Unmapped: 27 ⚠️
+- Mapped to phases: 27
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-22*
-*Last updated: 2026-02-22 after initial definition*
+*Last updated: 2026-02-22 after roadmap creation (100% coverage)*

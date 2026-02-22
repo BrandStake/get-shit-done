@@ -1432,6 +1432,17 @@ For each task:
    ROUTE_DETAIL=$(echo "$ROUTE_DECISION" | cut -d: -f2)
 
    echo "→ ROUTE_DECISION: $ROUTE_DECISION"
+   ```
+
+   b. **Branch on routing decision:**
+
+   - **If ROUTE_ACTION = "delegate":**
+     ```bash
+     SPECIALIST="$ROUTE_DETAIL"
+     echo "→ Delegating task to: $SPECIALIST"
+
+     # Generate specialist prompt using adapter
+     SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
 
      # TODO (Phase 3): Invoke specialist via Task tool
      # SPECIALIST_OUTPUT=$(invoke_task_tool "$SPECIALIST" "$SPECIALIST_PROMPT")
@@ -1903,6 +1914,45 @@ node ~/.claude/get-shit-done/bin/gsd-tools.cjs requirements mark-complete ${REQ_
 node ~/.claude/get-shit-done/bin/gsd-tools.cjs state add-blocker "Blocker description"
 ```
 </state_updates>
+
+<state_file_ownership>
+## State File Ownership (Single-Writer Pattern)
+
+**Only gsd-executor writes:**
+- .planning/STATE.md (current plan, progress, decisions, blockers)
+- .planning/ROADMAP.md (phase progress, plan completion checkboxes)
+- .planning/REQUIREMENTS.md (requirement checkboxes, traceability matrix)
+- .planning/phases/XX-name/*-PLAN.md (plan status updates)
+- .planning/phases/XX-name/*-SUMMARY.md (execution results)
+- .planning/delegation.log (delegation decision tracking)
+
+**Specialists (python-pro, typescript-pro, postgres-pro, etc.):**
+- Receive state files as READ-ONLY context via @-references in prompts
+- Return structured output: files_modified, verification_status, deviations, commit_message
+- NEVER write GSD state files directly
+- State updates happen via gsd-executor after parsing specialist output
+
+**Other GSD agents:**
+- gsd-planner: Writes PLAN.md files (creates new plans)
+- gsd-verifier: Writes VERIFICATION.md files (verification results)
+- gsd-researcher: Writes RESEARCH.md files (research findings)
+- gsd-discuss: Writes CONTEXT.md files (phase discussions)
+
+**Why single-writer for STATE/ROADMAP/REQUIREMENTS:**
+Single-writer prevents race conditions, maintains consistency, ensures single source of truth. 36.94% of multi-agent coordination failures stem from state management ambiguity (UC Berkeley research). By designating gsd-executor as sole writer of execution state, we eliminate transactional conflicts and state corruption from concurrent writes.
+
+**Enforcement:**
+1. Specialist prompts (via gsd_task_adapter) mark state files as READ-ONLY
+2. Specialists return structured data instead of writing files directly
+3. gsd-executor parses specialist output and updates state atomically
+4. State file writes always happen sequentially within single gsd-executor session
+5. Violations logged as deviations if detected
+
+**Exception:** Multi-agent parallel execution (different plans in same wave) is safe because:
+- Plans modify disjoint file sets (enforced by depends_on + files_modified in frontmatter)
+- Each gsd-executor instance has separate plan ID (no STATE.md write conflicts)
+- ROADMAP.md updates happen only after plan completion (not during execution)
+</state_file_ownership>
 
 <final_commit>
 ```bash

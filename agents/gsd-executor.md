@@ -1018,12 +1018,72 @@ grep -n "type=\"checkpoint" [plan-path]
 For each task:
 
 1. **If `type="auto"`:**
+
+   a. **Make routing decision:**
+   ```bash
+   # Extract task details
+   TASK_NAME="[task name from PLAN.md]"
+   TASK_FILES="[files from <files> element]"
+   TASK_ACTION="[action from <action> element]"
+   TASK_VERIFY="[verify from <verify> element]"
+   TASK_DONE="[done from <done> element]"
+   TASK_TYPE="auto"
+
+   # Make routing decision
+   ROUTE_DECISION=$(make_routing_decision "$TASK_NAME $TASK_ACTION" "$TASK_FILES" "$TASK_TYPE")
+   ROUTE_ACTION=$(echo "$ROUTE_DECISION" | cut -d: -f1)
+   ROUTE_DETAIL=$(echo "$ROUTE_DECISION" | cut -d: -f2)
+
+   echo "→ ROUTE_DECISION: $ROUTE_DECISION"
+   ```
+
+   b. **Branch on routing decision:**
+
+   - **If ROUTE_ACTION = "delegate":**
+     ```bash
+     SPECIALIST="$ROUTE_DETAIL"
+     echo "→ Delegating task to: $SPECIALIST"
+
+     # Generate specialist prompt using adapter
+     SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
+
+     # TODO (Phase 3): Invoke specialist via Task tool
+     # SPECIALIST_OUTPUT=$(invoke_task_tool "$SPECIALIST" "$SPECIALIST_PROMPT")
+     # RESULT=$(gsd_result_adapter "$SPECIALIST_OUTPUT" "$TASK_FILES")
+
+     # For Phase 1: Log delegation preparation
+     echo "✓ Specialist prompt prepared (delegation pending Phase 3 Task tool integration)" >&2
+     echo "  Specialist: $SPECIALIST" >&2
+     echo "  Files: $TASK_FILES" >&2
+
+     # Fall back to direct execution until Phase 3 complete
+     echo "→ Executing directly (Phase 3 Task tool not yet integrated)" >&2
+     ```
+
+   - **If ROUTE_ACTION = "direct":**
+     ```bash
+     echo "→ Executing directly: $ROUTE_DETAIL"
+     ```
+
+   c. **Execute task (direct execution path):**
    - Check for `tdd="true"` → follow TDD execution flow
    - Execute task, apply deviation rules as needed
    - Handle auth errors as authentication gates
    - Run verification, confirm done criteria
+
+   d. **Commit task:**
    - Commit (see task_commit_protocol)
    - Track completion + commit hash for Summary
+
+   e. **Log delegation metadata for observability:**
+   ```bash
+   # Append to phase-level delegation log for observability
+   if [ "$ROUTE_ACTION" = "delegate" ]; then
+     echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,$SPECIALIST,prepared" >> .planning/delegation.log
+   elif [ "$ROUTE_ACTION" = "direct" ]; then
+     echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,none,$ROUTE_DETAIL" >> .planning/delegation.log
+   fi
+   ```
 
 2. **If `type="checkpoint:*"`:**
    - STOP immediately — return structured checkpoint message

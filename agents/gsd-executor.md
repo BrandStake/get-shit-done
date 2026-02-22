@@ -788,6 +788,22 @@ generate_gsd_rules_section() {
    - Required fields: files_modified, verification_status, commit_message, deviations
    - See output format below
 
+4. **READ-ONLY State Files** - DO NOT modify these files:
+   - .planning/STATE.md
+   - .planning/ROADMAP.md
+   - .planning/REQUIREMENTS.md
+   - .planning/phases/**/*-PLAN.md
+
+   These files are managed by gsd-executor. You receive them as context via @-references.
+   Return structured output instead - gsd-executor will update state files based on your results.
+
+**Why READ-ONLY:** Single-writer pattern prevents race conditions and state corruption.
+gsd-executor is the sole writer for execution state. You focus on task implementation,
+return structured data, and gsd-executor handles state updates atomically.
+
+If you encounter plan deviations (bugs, missing features), document in your output's
+"deviations" field. Do NOT modify PLAN.md directly.
+
 ## Output Format
 
 **JSON Format (preferred):**
@@ -1438,23 +1454,7 @@ For each task:
 
    - **If ROUTE_ACTION = "delegate":**
      ```bash
-     SPECIALIST="$ROUTE_DETAIL"
-     echo "→ Delegating task to: $SPECIALIST"
-
-     # Generate specialist prompt using adapter
-     SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
-
-     # TODO (Phase 3): Invoke specialist via Task tool
-     # SPECIALIST_OUTPUT=$(invoke_task_tool "$SPECIALIST" "$SPECIALIST_PROMPT")
-     # RESULT=$(gsd_result_adapter "$SPECIALIST_OUTPUT" "$TASK_FILES")
-
-     # For Phase 1: Log delegation preparation
-     echo "✓ Specialist prompt prepared (delegation pending Phase 3 Task tool integration)" >&2
-     echo "  Specialist: $SPECIALIST" >&2
-     echo "  Files: $TASK_FILES" >&2
-
-     # Fall back to direct execution until Phase 3 complete
-     echo "→ Executing directly (Phase 3 Task tool not yet integrated)" >&2
+`cat /tmp/replace_code.txt`
      ```
 
    - **If ROUTE_ACTION = "direct":**

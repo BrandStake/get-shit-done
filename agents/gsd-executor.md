@@ -1038,6 +1038,60 @@ extract_deviations() {
 
 ---
 
+**Schema validation helper: validate_adapter_result()**
+
+Validates that adapter result matches expected schema with required fields and types.
+
+**Input:** JSON result from parsing
+
+**Output:** Returns 0 if valid, 1 if invalid (with error messages to stderr)
+
+**Implementation:**
+
+```bash
+validate_adapter_result() {
+  local result_json="$1"
+
+  # Check JSON is valid
+  if ! echo "$result_json" | jq empty 2>/dev/null; then
+    echo "ERROR: Invalid JSON" >&2
+    return 1
+  fi
+
+  # Check required fields exist
+  local required_fields=("files_modified" "verification_status" "commit_message")
+
+  for field in "${required_fields[@]}"; do
+    if ! echo "$result_json" | jq -e ".$field" >/dev/null 2>&1; then
+      echo "ERROR: Missing required field: $field" >&2
+      return 1
+    fi
+  done
+
+  # Check field types
+  if ! echo "$result_json" | jq -e '.files_modified | type == "array"' >/dev/null 2>&1; then
+    echo "ERROR: files_modified must be array" >&2
+    return 1
+  fi
+
+  if ! echo "$result_json" | jq -e '.verification_status | type == "string"' >/dev/null 2>&1; then
+    echo "ERROR: verification_status must be string" >&2
+    return 1
+  fi
+
+  # Validate verification_status values
+  local status=$(echo "$result_json" | jq -r '.verification_status')
+  if [[ ! "$status" =~ ^(passed|failed|unknown)$ ]]; then
+    echo "WARNING: verification_status should be 'passed', 'failed', or 'unknown', got: $status" >&2
+  fi
+
+  # All validations passed
+  return 0
+}
+```
+
+---
+
 **Specialist-to-GSD adapter: gsd_result_adapter()**
 
 Parses specialist output into GSD-compatible result structure.
@@ -1053,49 +1107,57 @@ gsd_result_adapter() {
   local specialist_output="$1"
   local expected_files="$2"
 
-  # Extract key information using heuristics
-  local files_modified=""
-  local verification_status="unknown"
-  local issues=""
-  local decisions=""
+  # Use multi-layer parsing for robust extraction
+  local parsed_result=$(parse_specialist_output_multilayer "$specialist_output" "$expected_files")
 
-  # Parse files mentioned in output
-  # Look for common patterns: "Created:", "Modified:", "Updated:", file paths
-  files_modified=$(echo "$specialist_output" | grep -iE "(created|modified|updated|changed):?\s+" | sed -E 's/^.*:\s*//' | head -n 10)
-
-  # If no explicit file mentions, fall back to expected files
-  if [ -z "$files_modified" ]; then
-    files_modified="$expected_files"
-  fi
-
-  # Parse verification status
-  # Look for success/failure indicators
-  if echo "$specialist_output" | grep -qiE "(verification (passed|successful)|all tests? passed?|successfully verified)"; then
-    verification_status="passed"
-  elif echo "$specialist_output" | grep -qiE "(verification failed|tests? failed|error|failed to verify)"; then
-    verification_status="failed"
-  else
-    # No explicit verification mention - assume passed if specialist completed
-    verification_status="passed"
-  fi
-
-  # Parse issues
-  # Look for error/issue/problem mentions
-  issues=$(echo "$specialist_output" | grep -iE "(issue|error|problem|warning):" | head -n 5)
-
-  # Parse decisions
-  # Look for decision/choice/selected mentions
-  decisions=$(echo "$specialist_output" | grep -iE "(decision|decided|chose|selected):" | head -n 5)
-
-  # Output structured result
-  cat <<EOF
+  # Validate the parsed result schema
+  if ! validate_adapter_result "$parsed_result"; then
+    # Validation failed - fall back to adapter_error_fallback
+    echo "ERROR: Adapter result validation failed" >&2
+    # Return basic fallback structure
+    cat <<EOF
 {
-  "files_modified": [$(echo "$files_modified" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
-  "verification_status": "$verification_status",
-  "issues": [$(echo "$issues" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
-  "decisions": [$(echo "$decisions" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')]
+  "files_modified": [$(echo "$expected_files" | tr ' ' '\n' | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
+  "verification_status": "unknown",
+  "commit_message": "feat(task): completed task",
+  "deviations": [],
+  "issues": [],
+  "decisions": []
 }
 EOF
+    return 1
+  fi
+
+  # Extract deviations from specialist output
+  local deviations=$(extract_deviations "$specialist_output")
+  local deviations_json="[]"
+
+  if [ -n "$deviations" ]; then
+    # Wrap deviations in JSON array
+    deviations_json="[$(echo "$deviations" | tr '\n' ',' | sed 's/,$//')"]"
+  fi
+
+  # Merge deviations into the parsed result
+  # Use jq to add deviations field to the parsed result
+  local final_result=$(echo "$parsed_result" | jq --argjson devs "$deviations_json" '. + {deviations: $devs}')
+
+  # Add legacy fields (issues, decisions) for backward compatibility
+  local issues=$(echo "$specialist_output" | grep -iE "(issue|error|problem|warning):" | head -n 5)
+  local decisions=$(echo "$specialist_output" | grep -iE "(decision|decided|chose|selected):" | head -n 5)
+
+  local issues_json="[]"
+  local decisions_json="[]"
+
+  if [ -n "$issues" ]; then
+    issues_json="[$(echo "$issues" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')]"
+  fi
+
+  if [ -n "$decisions" ]; then
+    decisions_json="[$(echo "$decisions" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')]"
+  fi
+
+  # Add legacy fields to final result
+  echo "$final_result" | jq --argjson iss "$issues_json" --argjson decs "$decisions_json" '. + {issues: $iss, decisions: $decs}'
 }
 ```
 

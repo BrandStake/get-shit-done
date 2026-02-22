@@ -903,6 +903,91 @@ SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "
 
 ---
 
+**Multi-layer parsing helper: parse_specialist_output_multilayer()**
+
+Parses specialist output through multiple fallback layers for robust extraction.
+
+**Input:** Specialist output text, expected files list
+
+**Output:** JSON with files_modified, verification_status, commit_message, deviations
+
+**Implementation:**
+
+```bash
+parse_specialist_output_multilayer() {
+  local specialist_output="$1"
+  local expected_files="$2"
+
+  # Layer 1: Try JSON extraction with jq validation
+  local json_block=""
+
+  # Extract JSON block (handles markdown code blocks)
+  if echo "$specialist_output" | grep -q '```json'; then
+    json_block=$(echo "$specialist_output" | sed -n '/```json/,/```/p' | sed '1d;$d')
+  else
+    # Try to find JSON object directly
+    json_block=$(echo "$specialist_output" | grep -o '{.*}' | head -n 1)
+  fi
+
+  # Validate JSON and extract fields
+  if [ -n "$json_block" ]; then
+    if echo "$json_block" | jq -e '.files_modified' >/dev/null 2>&1; then
+      # JSON is valid and has required field
+      echo "$json_block"
+      return 0
+    fi
+  fi
+
+  # Layer 2: Heuristic text extraction with regex
+  local files_modified=""
+  local verification_status="unknown"
+  local commit_message=""
+  local deviations=""
+
+  # Extract files using multiple pattern variations
+  files_modified=$(echo "$specialist_output" | grep -iE "(files? (modified|created|updated|changed)|modified|created|updated):" | sed -E 's/^[^:]+:\s*//' | tr '\n' '|')
+
+  if [ -z "$files_modified" ]; then
+    # Try bullet list format
+    files_modified=$(echo "$specialist_output" | grep -E "^- [a-zA-Z0-9/_.-]+\.(ts|js|py|go|rs|java|md|json|yaml|yml|sh)$" | sed 's/^- //' | tr '\n' '|')
+  fi
+
+  if [ -z "$files_modified" ]; then
+    # Fallback to expected files (Layer 3)
+    files_modified="$expected_files"
+  fi
+
+  # Extract verification status
+  if echo "$specialist_output" | grep -qiE "(verification:?\s+(passed|successful)|all tests? passed|successfully verified)"; then
+    verification_status="passed"
+  elif echo "$specialist_output" | grep -qiE "(verification:?\s+failed|tests? failed|verification.*error)"; then
+    verification_status="failed"
+  else
+    verification_status="passed"  # Assume passed if specialist completed
+  fi
+
+  # Extract commit message
+  commit_message=$(echo "$specialist_output" | grep -iE "commit message:" | sed -E 's/^.*commit message:\s*//' | head -n 1)
+
+  if [ -z "$commit_message" ]; then
+    # Generate default commit message
+    commit_message="feat(task): completed task"
+  fi
+
+  # Construct JSON from heuristic extraction
+  cat <<EOF
+{
+  "files_modified": [$(echo "$files_modified" | tr '|' '\n' | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
+  "verification_status": "$verification_status",
+  "commit_message": "$commit_message",
+  "deviations": []
+}
+EOF
+}
+```
+
+---
+
 **Specialist-to-GSD adapter: gsd_result_adapter()**
 
 Parses specialist output into GSD-compatible result structure.

@@ -12,7 +12,17 @@
     "research": true,
     "plan_check": true,
     "verifier": true,
-    "auto_advance": false
+    "auto_advance": false,
+    "use_specialists": false
+  },
+  "voltagent": {
+    "fallback_on_error": true,
+    "max_delegation_depth": 1,
+    "complexity_threshold": {
+      "min_files": 3,
+      "min_lines": 50,
+      "require_domain_match": true
+    }
   },
   "git": {
     "branching_strategy": "none"

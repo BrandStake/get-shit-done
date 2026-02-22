@@ -10,7 +10,7 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 ### Delegation Core
 
 - [ ] **DLGT-01**: gsd-executor detects task domain via keyword-based pattern matching
-- [ ] **DLGT-02**: gsd-executor checks VoltAgent specialist availability (npm list -g)
+- [ ] **DLGT-02**: gsd-executor checks VoltAgent specialist availability (filesystem ~/.claude/agents/)
 - [ ] **DLGT-03**: gsd-executor falls back to direct execution when specialist unavailable
 - [ ] **DLGT-04**: Only gsd-executor writes STATE.md (single-writer pattern)
 - [ ] **DLGT-05**: gsd-executor applies complexity threshold before delegating (>3 files OR domain expertise clearly beneficial)

@@ -136,6 +136,75 @@ VoltAgent specialist mappings for task delegation. Supports 127+ domain speciali
 **Fallback:** Direct execution when specialist unavailable (graceful degradation)
 </specialist_registry>
 
+<dynamic_specialist_registry>
+Populate available specialists at runtime to ensure only installed specialists are used for delegation.
+
+**Function: populate_available_specialists()**
+
+```bash
+populate_available_specialists() {
+  AVAILABLE_SPECIALISTS=""
+
+  # Check ~/.claude/agents/ for VoltAgent specialists
+  if [ -d "$HOME/.claude/agents" ]; then
+    for agent_file in "$HOME/.claude/agents"/*.md; do
+      if [ -f "$agent_file" ]; then
+        # Extract agent name from filename (e.g., python-pro.md -> python-pro)
+        agent_name=$(basename "$agent_file" .md)
+
+        # Filter for known VoltAgent specialists (exclude system agents like gsd-executor)
+        # VoltAgent specialists follow naming pattern: <domain>-<role> (e.g., python-pro, typescript-pro)
+        if echo "$agent_name" | grep -qE '(pro|specialist|expert|engineer|architect|tester)$'; then
+          AVAILABLE_SPECIALISTS="$AVAILABLE_SPECIALISTS $agent_name"
+        fi
+      fi
+    done
+  fi
+
+  # Also check npm global packages for voltagent-* packages
+  if command -v npm >/dev/null 2>&1; then
+    npm_specialists=$(npm list -g --depth=0 2>/dev/null | grep 'voltagent-' | sed 's/.*voltagent-\([^ @]*\).*/\1/' || echo "")
+    if [ -n "$npm_specialists" ]; then
+      AVAILABLE_SPECIALISTS="$AVAILABLE_SPECIALISTS $npm_specialists"
+    fi
+  fi
+
+  # Deduplicate and trim whitespace
+  AVAILABLE_SPECIALISTS=$(echo "$AVAILABLE_SPECIALISTS" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
+
+  echo "Available specialists: $AVAILABLE_SPECIALISTS"
+}
+```
+
+**Call during initialization** (in load_project_state step when USE_SPECIALISTS=true):
+
+```bash
+if [ "$USE_SPECIALISTS" = "true" ]; then
+  populate_available_specialists
+  # AVAILABLE_SPECIALISTS now contains space-separated list of installed specialists
+fi
+```
+
+**Validation before delegation:**
+
+```bash
+check_specialist_available() {
+  local specialist_name="$1"
+  echo "$AVAILABLE_SPECIALISTS" | grep -q "\b$specialist_name\b"
+  return $?
+}
+
+# Usage example:
+if check_specialist_available "python-pro"; then
+  # Delegate to python-pro
+else
+  # Fall back to direct execution
+fi
+```
+
+This ensures delegation only happens when the specialist is actually installed, preventing errors from missing dependencies.
+</dynamic_specialist_registry>
+
 <execution_flow>
 
 <step name="load_project_state" priority="first">

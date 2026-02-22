@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-22)
 ## Current Position
 
 Phase: 2 of 6 (Adapters - Context Translation)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-22 — Completed 02-01-PLAN.md (Context Translation Adapters)
+Last activity: 2026-02-22 — Completed 02-02-PLAN.md (Multi-layer Parsing & Validation)
 
 Progress: [██░░░░░░░░] 17% (1/6 phases complete, Phase 2 in progress)
 
@@ -23,6 +23,10 @@ Progress: [██░░░░░░░░] 17% (1/6 phases complete, Phase 2 in 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Multi-layer parsing strategy (02-02) - JSON extraction → heuristic regex → expected files fallback for robust specialist output handling
+- Deviation extraction uses pattern matching (02-02) - Pattern matching against GSD deviation rule keywords for Rule 1-3 classification
+- Schema validation with graceful fallback (02-02) - Validate adapter results but degrade to error structure on failure
+- Backward compatibility maintained (02-02) - Preserved legacy issues/decisions fields in result JSON for Phase 1 workflows
 - Dual output format (JSON + text fallback) (02-01) - Ensures specialists can comply regardless of capabilities, robust parsing
 - Deviations field in output schema (02-01) - Enables tracking Rule 1-3 violations for SUMMARY.md documentation
 - File list truncation at 10 files (02-01) - Prevents overwhelming specialists while preserving core context
@@ -57,9 +61,10 @@ None yet.
 | 01-03 | 193s | 3 | 1 | Routing logic, adapters, execute_tasks integration |
 | 01-04 | 406s | 2 | 2 | Comprehensive test suite (49 tests), bug fixes |
 | 02-01 | 2min | 3 | 1 | Context pruning and GSD rule injection in adapters |
+| 02-02 | 203s | 3 | 1 | Multi-layer parsing, schema validation, deviation extraction |
 
 ## Session Info
 
-Last session: 2026-02-22T20:22:18Z
-Stopped at: Completed 02-01-PLAN.md (Context Translation Adapters)
+Last session: 2026-02-22T20:24:16Z
+Stopped at: Completed 02-02-PLAN.md (Multi-layer Parsing & Validation)
 Resume file: None

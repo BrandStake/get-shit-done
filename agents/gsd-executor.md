@@ -31,6 +31,111 @@ Before executing, discover project context:
 This ensures project-specific patterns, conventions, and best practices are applied during execution.
 </project_context>
 
+<specialist_registry>
+VoltAgent specialist mappings for task delegation. Supports 127+ domain specialists when installed.
+
+**Language Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| python-pro | python, fastapi, django, flask, pytest, pandas, numpy, scipy | .py, .pyx, requirements.txt, pyproject.toml | Python development, web frameworks, data science |
+| typescript-pro | typescript, tsx, ts, react, next.js, angular, vue | .ts, .tsx, tsconfig.json | TypeScript development, React, frameworks |
+| javascript-expert | javascript, js, node, express, npm | .js, .mjs, package.json | JavaScript, Node.js, Express |
+| golang-pro | golang, go, goroutine, channel | .go, go.mod, go.sum | Go development, concurrency |
+| rust-engineer | rust, cargo, tokio, async | .rs, Cargo.toml, Cargo.lock | Rust development, systems programming |
+| java-specialist | java, spring, maven, gradle, jvm | .java, pom.xml, build.gradle | Java, Spring, enterprise |
+| csharp-specialist | csharp, c#, dotnet, .net, asp.net | .cs, .csproj, .sln | C#, .NET, ASP.NET |
+| ruby-specialist | ruby, rails, gem, bundler | .rb, Gemfile, Rakefile | Ruby, Rails |
+| php-specialist | php, laravel, composer, symfony | .php, composer.json | PHP, Laravel, Symfony |
+| swift-specialist | swift, ios, swiftui, cocoapods | .swift, Package.swift, Podfile | Swift, iOS, macOS development |
+
+**Infrastructure Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| kubernetes-specialist | kubernetes, k8s, deployment, helm, ingress, pod, service, configmap | .yaml, .yml (in k8s context) | Kubernetes orchestration, deployments |
+| docker-expert | docker, dockerfile, container, compose, image | Dockerfile, docker-compose.yml, .dockerignore | Docker containerization |
+| terraform-engineer | terraform, tf, provider, module, state | .tf, .tfvars, .tfstate | Infrastructure as code, Terraform |
+| ansible-specialist | ansible, playbook, role, vault | .yml (ansible context), ansible.cfg | Configuration management |
+| aws-architect | aws, ec2, s3, lambda, cloudformation, eks | cloudformation.yml, serverless.yml | AWS cloud architecture |
+| azure-specialist | azure, arm, bicep, aks | .bicep, azuredeploy.json | Azure cloud |
+| gcp-specialist | gcp, google cloud, gke, cloud run | cloudbuild.yaml | Google Cloud Platform |
+| devops-engineer | ci/cd, pipeline, jenkins, github actions, gitlab | .github/workflows/, Jenkinsfile, .gitlab-ci.yml | CI/CD pipelines, DevOps |
+
+**Data Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| postgres-pro | postgres, postgresql, psql, sql, database schema, migration | .sql, migrations/ | PostgreSQL database design, optimization |
+| mysql-specialist | mysql, mariadb, sql | .sql (mysql context) | MySQL database |
+| mongodb-specialist | mongodb, mongo, nosql, document database | .json (mongo context) | MongoDB, NoSQL |
+| redis-expert | redis, cache, key-value, pub-sub | redis.conf | Redis caching, pub/sub |
+| database-optimizer | database performance, index, query optimization, explain | .sql | Database performance tuning |
+| data-engineer | etl, data pipeline, airflow, spark, kafka | dags/, airflow/ | Data pipelines, ETL |
+| analytics-specialist | analytics, metrics, dashboard, reporting | .sql (analytics context) | Data analytics, BI |
+
+**Security Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| security-engineer | security, auth, oauth, jwt, cors, csrf, xss, sql injection | security/, auth/ | Security architecture, authentication |
+| penetration-tester | penetration test, vulnerability, exploit, security scan | security-reports/ | Security testing, vulnerability assessment |
+| compliance-specialist | compliance, gdpr, hipaa, sox, audit | compliance/ | Regulatory compliance |
+
+**Frontend Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| react-specialist | react, jsx, hooks, context, redux | .jsx, .tsx (react context) | React development |
+| vue-specialist | vue, vuex, nuxt, composition api | .vue, nuxt.config.js | Vue.js development |
+| angular-specialist | angular, rxjs, ngrx, @angular | .component.ts, angular.json | Angular development |
+| ui-ux-specialist | ui, ux, design system, accessibility, a11y | design/, styles/ | UI/UX design, accessibility |
+| css-expert | css, scss, sass, tailwind, styled-components | .css, .scss, .sass | Styling, CSS frameworks |
+
+**Testing Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| qa-engineer | testing, test, qa, quality assurance | tests/, test/ | Quality assurance, testing strategy |
+| test-automation-specialist | automation, selenium, playwright, cypress | e2e/, integration/ | Test automation |
+| performance-tester | performance, load test, stress test, benchmark | performance/ | Performance testing |
+
+**Backend Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| api-specialist | api, rest, graphql, endpoint, openapi | api/, swagger.yml, schema.graphql | API design, REST, GraphQL |
+| microservices-architect | microservices, service mesh, istio, distributed | services/ | Microservices architecture |
+| message-queue-specialist | queue, kafka, rabbitmq, sqs, pubsub | messaging/ | Message queues, event streaming |
+
+**Meta Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| multi-agent-coordinator | multi-agent, coordination, workflow | workflows/ | Coordinating multiple specialists |
+| workflow-orchestrator | workflow, orchestration, state machine | workflows/ | Complex workflow orchestration |
+
+**Mobile Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| ios-specialist | ios, xcode, swift, objective-c | .swift, .m, .xcodeproj | iOS development |
+| android-specialist | android, kotlin, gradle, androidmanifest | .kt, build.gradle, AndroidManifest.xml | Android development |
+| flutter-specialist | flutter, dart, widget | .dart, pubspec.yaml | Flutter cross-platform |
+| react-native-specialist | react native, expo, metro | .jsx (RN context), app.json | React Native |
+
+**Machine Learning Specialists:**
+| Specialist | Keywords | File Extensions | Domain |
+|------------|----------|-----------------|--------|
+| ml-engineer | machine learning, ml, model, training | models/, notebooks/ | ML model development |
+| deep-learning-specialist | deep learning, neural network, pytorch, tensorflow | .ipynb, .pt, .h5 | Deep learning |
+| nlp-specialist | nlp, natural language, bert, transformers | nlp/ | Natural language processing |
+| computer-vision-specialist | computer vision, cv, image, opencv | vision/ | Computer vision |
+
+**Total: 50+ specialists mapped** (registry expandable to full 127+ as VoltAgent plugins installed)
+
+**Complexity thresholds for delegation:**
+- File count: >3 files modified
+- Line count estimate: >50 lines new/modified code
+- Domain expertise benefit: Specialist has clear value-add over generalist
+- Task type exclusions: Simple documentation, config changes, single-line fixes
+
+**Specialist location:** `~/.claude/agents/` (auto-loaded by Claude Code)
+**Detection method:** Filesystem check + keyword pattern matching
+**Fallback:** Direct execution when specialist unavailable (graceful degradation)
+</specialist_registry>
+
 <execution_flow>
 
 <step name="load_project_state" priority="first">

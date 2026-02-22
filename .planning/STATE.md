@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-22)
 ## Current Position
 
 Phase: 1 of 6 (Foundation - Detection & Routing)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-22 — Roadmap created for v1.21 Hybrid Agent Team Execution
+Plan: 2 of 6 in current phase
+Status: In progress
+Last activity: 2026-02-22 — Completed 01-02-PLAN.md (Specialist Configuration Support)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17% (2/12 plans complete)
 
 ## Accumulated Context
 
@@ -26,6 +26,9 @@ Recent decisions affecting current work:
 - gsd-executor as coordinator - Preserves GSD guarantees (state, commits, deviations)
 - Adapter pattern (task + result) - Clean separation, reusable, testable
 - Use multi-agent-coordinator - VoltAgent provides coordination expertise
+- Default use_specialists to false for v1.21 (01-02) - Preserves backward compatibility with v1.20 workflows
+- Dual detection: filesystem + npm (01-02) - VoltAgent specialists can be installed via npm or manually placed in ~/.claude/agents/
+- Filter specialists by naming pattern (01-02) - VoltAgent specialists follow <domain>-<role> pattern, prevents delegation to system agents
 
 ### Blockers
 
@@ -35,9 +38,11 @@ None yet.
 
 | Phase | Duration | Tasks | Files | Notes |
 |-------|----------|-------|-------|-------|
-| - | - | - | - | - |
+| 01-01 | ~5min | 3 | 1 | Domain detection with keyword pattern matching |
+| 01-02 | 154s | 3 | 3 | Specialist configuration and dynamic registry |
 
 ## Session Info
 
 Last session: 2026-02-22
-Stopped at: Roadmap and STATE.md created, ready to plan Phase 1
+Stopped at: Completed 01-02-PLAN.md (Specialist Configuration Support)
+Resume file: None

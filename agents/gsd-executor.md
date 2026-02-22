@@ -988,6 +988,56 @@ EOF
 
 ---
 
+**Deviation extraction helper: extract_deviations()**
+
+Extracts and classifies deviations from specialist output against GSD deviation rules.
+
+**Input:** Specialist output text
+
+**Output:** JSON array of deviations with rule, description, and fix
+
+**Implementation:**
+
+```bash
+extract_deviations() {
+  local specialist_output="$1"
+
+  # Pattern 1: Explicit deviation reporting (JSON or structured text)
+  if echo "$specialist_output" | jq -e '.deviations' >/dev/null 2>&1; then
+    # Extract from JSON
+    echo "$specialist_output" | jq -c '.deviations[]'
+    return 0
+  fi
+
+  # Pattern 2: Look for GSD rule keywords in text
+  # Rule 1: Bug fixes
+  while IFS= read -r line; do
+    if echo "$line" | grep -qiE "(fixed bug|bug fix|corrected|fixed error|resolved issue)"; then
+      local description=$(echo "$line" | sed -E 's/^[^:]*:\s*//')
+      echo "{\"rule\":\"Rule 1 - Bug\",\"description\":\"$description\",\"fix\":\"See output above\"}"
+    fi
+  done < <(echo "$specialist_output" | grep -iE "(fixed|bug|corrected|error|issue)")
+
+  # Rule 2: Missing critical functionality
+  while IFS= read -r line; do
+    if echo "$line" | grep -qiE "(added.*validation|added.*error handling|added.*check|missing|required)"; then
+      local description=$(echo "$line" | sed -E 's/^[^:]*:\s*//')
+      echo "{\"rule\":\"Rule 2 - Missing Critical\",\"description\":\"$description\",\"fix\":\"See output above\"}"
+    fi
+  done < <(echo "$specialist_output" | grep -iE "(added|missing|required|validation|error handling)")
+
+  # Rule 3: Blocking issues
+  while IFS= read -r line; do
+    if echo "$line" | grep -qiE "(blocked|blocker|dependency|prerequisite|cannot proceed)"; then
+      local description=$(echo "$line" | sed -E 's/^[^:]*:\s*//')
+      echo "{\"rule\":\"Rule 3 - Blocking\",\"description\":\"$description\",\"fix\":\"See output above\"}"
+    fi
+  done < <(echo "$specialist_output" | grep -iE "(blocked|blocker|dependency|cannot)")
+}
+```
+
+---
+
 **Specialist-to-GSD adapter: gsd_result_adapter()**
 
 Parses specialist output into GSD-compatible result structure.

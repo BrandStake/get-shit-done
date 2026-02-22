@@ -49,11 +49,12 @@ Plans:
   3. gsd-task-adapter prunes context to prevent token overflow (essential subset, not full state dump)
   4. gsd-result-adapter parses specialist output and extracts structured fields (files_modified, deviations, commit_message)
   5. gsd-result-adapter validates required fields are present and falls back to heuristic parsing if needed
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Enhance task adapter with context pruning and GSD rule injection
+- [ ] 02-02-PLAN.md — Enhance result adapter with multi-layer parsing and deviation extraction
+- [ ] 02-03-PLAN.md — Comprehensive test suite for adapter robustness
 
 ### Phase 3: Integration - Wiring & Delegation
 **Goal**: gsd-executor orchestrates end-to-end delegation flow from task routing to specialist execution to state updates
@@ -128,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation - Detection & Routing | 4/4 | Complete | 2026-02-22 |
-| 2. Adapters - Context Translation | 0/TBD | Ready to plan | - |
+| 2. Adapters - Context Translation | 0/3 | Ready to execute | - |
 | 3. Integration - Wiring & Delegation | 0/TBD | Not started | - |
 | 4. Configuration - Settings & Registry | 0/TBD | Not started | - |
 | 5. Testing - Validation & Edge Cases | 0/TBD | Not started | - |

@@ -69,11 +69,12 @@ Plans:
   6. Only gsd-executor writes STATE.md, PLAN.md, ROADMAP.md (single-writer pattern enforced)
   7. Checkpoint status from specialists is captured and presented by gsd-executor
   8. Fallback decisions are logged when specialists unavailable
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Task tool integration and context injection (CLAUDE.md, skills)
+- [ ] 03-02-PLAN.md — Co-authored commits and SUMMARY.md specialist metadata
+- [ ] 03-03-PLAN.md — Delegation logging and single-writer state enforcement
 
 ### Phase 4: Configuration - Settings & Registry
 **Goal**: Users can control delegation behavior through config.json settings and specialist registry mappings
@@ -130,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation - Detection & Routing | 4/4 | Complete | 2026-02-22 |
 | 2. Adapters - Context Translation | 3/3 | Complete | 2026-02-22 |
-| 3. Integration - Wiring & Delegation | 0/TBD | Ready to execute | - |
+| 3. Integration - Wiring & Delegation | 0/3 | Ready to execute | - |
 | 4. Configuration - Settings & Registry | 0/TBD | Not started | - |
 | 5. Testing - Validation & Edge Cases | 0/TBD | Not started | - |
 | 6. Observability - Logging & Metrics | 0/TBD | Not started | - |

@@ -12,9 +12,9 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 - [x] **DLGT-01**: gsd-executor detects task domain via keyword-based pattern matching
 - [x] **DLGT-02**: gsd-executor checks VoltAgent specialist availability (filesystem ~/.claude/agents/)
 - [x] **DLGT-03**: gsd-executor falls back to direct execution when specialist unavailable
-- [ ] **DLGT-04**: Only gsd-executor writes STATE.md (single-writer pattern)
+- [x] **DLGT-04**: Only gsd-executor writes STATE.md (single-writer pattern)
 - [x] **DLGT-05**: gsd-executor applies complexity threshold before delegating (>3 files OR domain expertise clearly beneficial)
-- [ ] **DLGT-06**: Fallback decisions are logged ("python-pro unavailable, using generalist")
+- [x] **DLGT-06**: Fallback decisions are logged ("python-pro unavailable, using generalist")
 
 ### Adapter Layer
 
@@ -27,12 +27,12 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Integration
 
-- [ ] **INTG-01**: gsd-executor routing logic (Route A: delegate vs Route B: direct)
-- [ ] **INTG-02**: Specialist invocation via Task(subagent_type="${SPECIALIST_TYPE}")
-- [ ] **INTG-03**: Co-authored commits: `Co-authored-by: {specialist} <specialist@voltagent>`
-- [ ] **INTG-04**: SUMMARY.md includes specialist usage metadata (which specialist, why selected)
-- [ ] **INTG-05**: Specialists receive project context (CLAUDE.md, .agents/skills/)
-- [ ] **INTG-06**: Checkpoint handling preserved (specialists return checkpoint status → gsd-executor presents)
+- [x] **INTG-01**: gsd-executor routing logic (Route A: delegate vs Route B: direct)
+- [x] **INTG-02**: Specialist invocation via Task(subagent_type="${SPECIALIST_TYPE}")
+- [x] **INTG-03**: Co-authored commits: `Co-authored-by: {specialist} <specialist@voltagent>`
+- [x] **INTG-04**: SUMMARY.md includes specialist usage metadata (which specialist, why selected)
+- [x] **INTG-05**: Specialists receive project context (CLAUDE.md, .agents/skills/)
+- [x] **INTG-06**: Checkpoint handling preserved (specialists return checkpoint status → gsd-executor presents)
 
 ### Configuration
 
@@ -96,21 +96,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DLGT-01 | Phase 1 | Complete |
 | DLGT-02 | Phase 1 | Complete |
 | DLGT-03 | Phase 1 | Complete |
-| DLGT-04 | Phase 3 | Pending |
+| DLGT-04 | Phase 3 | Complete |
 | DLGT-05 | Phase 1 | Complete |
-| DLGT-06 | Phase 3 | Pending |
+| DLGT-06 | Phase 3 | Complete |
 | ADPT-01 | Phase 2 | Complete |
 | ADPT-02 | Phase 2 | Complete |
 | ADPT-03 | Phase 2 | Complete |
 | ADPT-04 | Phase 2 | Complete |
 | ADPT-05 | Phase 2 | Complete |
 | ADPT-06 | Phase 2 | Complete |
-| INTG-01 | Phase 3 | Pending |
-| INTG-02 | Phase 3 | Pending |
-| INTG-03 | Phase 3 | Pending |
-| INTG-04 | Phase 3 | Pending |
-| INTG-05 | Phase 3 | Pending |
-| INTG-06 | Phase 3 | Pending |
+| INTG-01 | Phase 3 | Complete |
+| INTG-02 | Phase 3 | Complete |
+| INTG-03 | Phase 3 | Complete |
+| INTG-04 | Phase 3 | Complete |
+| INTG-05 | Phase 3 | Complete |
+| INTG-06 | Phase 3 | Complete |
 | CONF-01 | Phase 4 | Pending |
 | CONF-02 | Phase 4 | Pending |
 | CONF-03 | Phase 4 | Pending |

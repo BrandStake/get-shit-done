@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation - Detection & Routing** - Domain detection, availability checks, and fallback hierarchy
 - [x] **Phase 2: Adapters - Context Translation** - Translate GSD tasks to specialist prompts and parse results
-- [ ] **Phase 3: Integration - Wiring & Delegation** - End-to-end delegation flow with Task tool invocation
+- [x] **Phase 3: Integration - Wiring & Delegation** - End-to-end delegation flow with Task tool invocation
 - [ ] **Phase 4: Configuration - Settings & Registry** - Config schema, specialist registry, and feature flags
 - [ ] **Phase 5: Testing - Validation & Edge Cases** - Integration tests, backward compatibility, fallback validation
 - [ ] **Phase 6: Observability - Logging & Metrics** - Structured logging, delegation metrics, quality gates
@@ -72,9 +72,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Task tool integration and context injection (CLAUDE.md, skills)
-- [ ] 03-02-PLAN.md — Co-authored commits and SUMMARY.md specialist metadata
-- [ ] 03-03-PLAN.md — Delegation logging and single-writer state enforcement
+- [x] 03-01-PLAN.md — Task tool integration and context injection (CLAUDE.md, skills)
+- [x] 03-02-PLAN.md — Co-authored commits and SUMMARY.md specialist metadata
+- [x] 03-03-PLAN.md — Delegation logging and single-writer state enforcement
 
 ### Phase 4: Configuration - Settings & Registry
 **Goal**: Users can control delegation behavior through config.json settings and specialist registry mappings
@@ -131,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation - Detection & Routing | 4/4 | Complete | 2026-02-22 |
 | 2. Adapters - Context Translation | 3/3 | Complete | 2026-02-22 |
-| 3. Integration - Wiring & Delegation | 0/3 | Ready to execute | - |
-| 4. Configuration - Settings & Registry | 0/TBD | Not started | - |
+| 3. Integration - Wiring & Delegation | 3/3 | Complete | 2026-02-22 |
+| 4. Configuration - Settings & Registry | 0/TBD | Ready to execute | - |
 | 5. Testing - Validation & Edge Cases | 0/TBD | Not started | - |
 | 6. Observability - Logging & Metrics | 0/TBD | Not started | - |

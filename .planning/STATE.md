@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-22)
 ## Current Position
 
 Phase: 3 of 6 (Integration - Wiring & Delegation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-22 — Phase 2 verified and complete
+Plan: 2 of TBD in current phase
+Status: In progress
+Last activity: 2026-02-22 — Completed 03-02-PLAN.md
 
 Progress: [████░░░░░░] 33% (2/6 phases complete)
 
@@ -23,6 +23,10 @@ Progress: [████░░░░░░] 33% (2/6 phases complete)
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- Use Git Co-authored-by trailers for specialist attribution (03-02) - GitHub/GitLab parseable standard format
+- Email domain specialist@voltagent for all VoltAgent specialists (03-02) - Identifies specialist co-authors
+- Conditionally omit specialist-usage frontmatter when no delegation (03-02) - Clean YAML, no empty arrays
+- Track task duration and reason from routing decision (03-02) - Enables observability and delegation pattern analysis
 - Test component functions individually (02-03) - Test parse/validate/extract separately rather than full gsd_result_adapter due to complex quote nesting
 - Brace-counting function extraction (02-03) - Character-level counting for accurate extraction of nested bash functions from markdown
 - Graceful edge case fallback (02-03) - Accept fallback behavior for ambiguous cases (e.g., multiple EOF markers) as correct
@@ -66,9 +70,10 @@ None yet.
 | 02-01 | 2min | 3 | 1 | Context pruning and GSD rule injection in adapters |
 | 02-02 | 203s | 3 | 1 | Multi-layer parsing, schema validation, deviation extraction |
 | 02-03 | 10min | 3 | 1 | Comprehensive adapter test suite (87 tests), ADPT validation |
+| 03-02 | 4min | 3 | 1 | Co-authored commits and SUMMARY.md specialist metadata |
 
 ## Session Info
 
-Last session: 2026-02-22T20:23:20Z
-Stopped at: Completed 02-03-PLAN.md (Test Suite for Adapter Enhancements)
+Last session: 2026-02-22T20:59:37Z
+Stopped at: Completed 03-02-PLAN.md (Co-Authored Commits & SUMMARY.md Metadata)
 Resume file: None

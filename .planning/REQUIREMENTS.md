@@ -9,11 +9,11 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Delegation Core
 
-- [ ] **DLGT-01**: gsd-executor detects task domain via keyword-based pattern matching
-- [ ] **DLGT-02**: gsd-executor checks VoltAgent specialist availability (filesystem ~/.claude/agents/)
-- [ ] **DLGT-03**: gsd-executor falls back to direct execution when specialist unavailable
+- [x] **DLGT-01**: gsd-executor detects task domain via keyword-based pattern matching
+- [x] **DLGT-02**: gsd-executor checks VoltAgent specialist availability (filesystem ~/.claude/agents/)
+- [x] **DLGT-03**: gsd-executor falls back to direct execution when specialist unavailable
 - [ ] **DLGT-04**: Only gsd-executor writes STATE.md (single-writer pattern)
-- [ ] **DLGT-05**: gsd-executor applies complexity threshold before delegating (>3 files OR domain expertise clearly beneficial)
+- [x] **DLGT-05**: gsd-executor applies complexity threshold before delegating (>3 files OR domain expertise clearly beneficial)
 - [ ] **DLGT-06**: Fallback decisions are logged ("python-pro unavailable, using generalist")
 
 ### Adapter Layer
@@ -48,9 +48,9 @@ Requirements for hybrid agent team execution. Each maps to roadmap phases.
 
 ### Specialist Support
 
-- [ ] **SPEC-01**: Support all VoltAgent specialists via dynamic detection (127+ specialists)
-- [ ] **SPEC-02**: Specialist registry auto-populates from detected VoltAgent plugins
-- [ ] **SPEC-03**: Domain patterns map file extensions and keywords to specialist types
+- [x] **SPEC-01**: Support all VoltAgent specialists via dynamic detection (127+ specialists)
+- [x] **SPEC-02**: Specialist registry auto-populates from detected VoltAgent plugins
+- [x] **SPEC-03**: Domain patterns map file extensions and keywords to specialist types
 
 ## Future Requirements (v1.22+)
 
@@ -93,11 +93,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DLGT-01 | Phase 1 | Pending |
-| DLGT-02 | Phase 1 | Pending |
-| DLGT-03 | Phase 1 | Pending |
+| DLGT-01 | Phase 1 | Complete |
+| DLGT-02 | Phase 1 | Complete |
+| DLGT-03 | Phase 1 | Complete |
 | DLGT-04 | Phase 3 | Pending |
-| DLGT-05 | Phase 1 | Pending |
+| DLGT-05 | Phase 1 | Complete |
 | DLGT-06 | Phase 3 | Pending |
 | ADPT-01 | Phase 2 | Pending |
 | ADPT-02 | Phase 2 | Pending |
@@ -117,9 +117,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OBSV-01 | Phase 6 | Pending |
 | OBSV-02 | Phase 6 | Pending |
 | OBSV-03 | Phase 6 | Pending |
-| SPEC-01 | Phase 1 | Pending |
-| SPEC-02 | Phase 1 | Pending |
-| SPEC-03 | Phase 1 | Pending |
+| SPEC-01 | Phase 1 | Complete |
+| SPEC-02 | Phase 1 | Complete |
+| SPEC-03 | Phase 1 | Complete |
 
 **Coverage:**
 - v1.21 requirements: 27 total

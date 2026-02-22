@@ -44,98 +44,72 @@ This approach prevents token waste (CLAUDE.md not manually appended to prompts) 
 </project_context>
 
 <specialist_registry>
-VoltAgent specialist mappings for task delegation. Supports 127+ domain specialists when installed.
+VoltAgent specialist mappings for task delegation. Uses full `voltagent-{category}:{name}` format for Task tool invocation.
 
-**Language Specialists:**
+**Note:** Claude Code handles specialist availability - no detection needed. If a specialist isn't installed, the Task tool will fail gracefully and gsd-executor falls back to direct execution.
+
+**Language Specialists (voltagent-lang):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| python-pro | python, fastapi, django, flask, pytest, pandas, numpy, scipy | .py, .pyx, requirements.txt, pyproject.toml | Python development, web frameworks, data science |
-| typescript-pro | typescript, tsx, ts, react, next.js, angular, vue | .ts, .tsx, tsconfig.json | TypeScript development, React, frameworks |
-| javascript-expert | javascript, js, node, express, npm | .js, .mjs, package.json | JavaScript, Node.js, Express |
-| golang-pro | golang, go, goroutine, channel | .go, go.mod, go.sum | Go development, concurrency |
-| rust-engineer | rust, cargo, tokio, async | .rs, Cargo.toml, Cargo.lock | Rust development, systems programming |
-| java-specialist | java, spring, maven, gradle, jvm | .java, pom.xml, build.gradle | Java, Spring, enterprise |
-| csharp-specialist | csharp, c#, dotnet, .net, asp.net | .cs, .csproj, .sln | C#, .NET, ASP.NET |
-| ruby-specialist | ruby, rails, gem, bundler | .rb, Gemfile, Rakefile | Ruby, Rails |
-| php-specialist | php, laravel, composer, symfony | .php, composer.json | PHP, Laravel, Symfony |
-| swift-specialist | swift, ios, swiftui, cocoapods | .swift, Package.swift, Podfile | Swift, iOS, macOS development |
+| voltagent-lang:python-pro | python, fastapi, django, flask, pytest, pandas, numpy, scipy | .py, .pyx, requirements.txt, pyproject.toml | Python development, web frameworks, data science |
+| voltagent-lang:typescript-pro | typescript, tsx, ts, react, next.js, angular, vue | .ts, .tsx, tsconfig.json | TypeScript development, React, frameworks |
+| voltagent-lang:javascript-pro | javascript, js, node, express, npm | .js, .mjs, package.json | JavaScript, Node.js, Express |
+| voltagent-lang:golang-pro | golang, go, goroutine, channel | .go, go.mod, go.sum | Go development, concurrency |
+| voltagent-lang:rust-engineer | rust, cargo, tokio, async | .rs, Cargo.toml, Cargo.lock | Rust development, systems programming |
+| voltagent-lang:java-architect | java, spring, maven, gradle, jvm | .java, pom.xml, build.gradle | Java, Spring, enterprise |
+| voltagent-lang:csharp-developer | csharp, c#, dotnet, .net, asp.net | .cs, .csproj, .sln | C#, .NET, ASP.NET |
+| voltagent-lang:rails-expert | ruby, rails, gem, bundler | .rb, Gemfile, Rakefile | Ruby, Rails |
+| voltagent-lang:php-pro | php, laravel, composer, symfony | .php, composer.json | PHP, Laravel, Symfony |
+| voltagent-lang:swift-expert | swift, ios, swiftui, cocoapods | .swift, Package.swift, Podfile | Swift, iOS, macOS development |
 
-**Infrastructure Specialists:**
+**Infrastructure Specialists (voltagent-infra):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| kubernetes-specialist | kubernetes, k8s, deployment, helm, ingress, pod, service, configmap | .yaml, .yml (in k8s context) | Kubernetes orchestration, deployments |
-| docker-expert | docker, dockerfile, container, compose, image | Dockerfile, docker-compose.yml, .dockerignore | Docker containerization |
-| terraform-engineer | terraform, tf, provider, module, state | .tf, .tfvars, .tfstate | Infrastructure as code, Terraform |
-| ansible-specialist | ansible, playbook, role, vault | .yml (ansible context), ansible.cfg | Configuration management |
-| aws-architect | aws, ec2, s3, lambda, cloudformation, eks | cloudformation.yml, serverless.yml | AWS cloud architecture |
-| azure-specialist | azure, arm, bicep, aks | .bicep, azuredeploy.json | Azure cloud |
-| gcp-specialist | gcp, google cloud, gke, cloud run | cloudbuild.yaml | Google Cloud Platform |
-| devops-engineer | ci/cd, pipeline, jenkins, github actions, gitlab | .github/workflows/, Jenkinsfile, .gitlab-ci.yml | CI/CD pipelines, DevOps |
+| voltagent-infra:kubernetes-specialist | kubernetes, k8s, deployment, helm, ingress, pod, service, configmap | .yaml, .yml (in k8s context) | Kubernetes orchestration, deployments |
+| voltagent-infra:docker-expert | docker, dockerfile, container, compose, image | Dockerfile, docker-compose.yml, .dockerignore | Docker containerization |
+| voltagent-infra:terraform-engineer | terraform, tf, provider, module, state | .tf, .tfvars, .tfstate | Infrastructure as code, Terraform |
+| voltagent-infra:devops-engineer | ci/cd, pipeline, jenkins, github actions, gitlab, ansible | .github/workflows/, Jenkinsfile, .gitlab-ci.yml | CI/CD pipelines, DevOps |
+| voltagent-infra:cloud-architect | aws, azure, gcp, cloud, ec2, s3, lambda | cloudformation.yml, serverless.yml | Cloud architecture |
+| voltagent-infra:security-engineer | security, auth, oauth, jwt, cors, csrf, xss | security/, auth/ | Security architecture |
 
-**Data Specialists:**
+**Data Specialists (voltagent-data-ai):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| postgres-pro | postgres, postgresql, psql, sql, database schema, migration | .sql, migrations/ | PostgreSQL database design, optimization |
-| mysql-specialist | mysql, mariadb, sql | .sql (mysql context) | MySQL database |
-| mongodb-specialist | mongodb, mongo, nosql, document database | .json (mongo context) | MongoDB, NoSQL |
-| redis-expert | redis, cache, key-value, pub-sub | redis.conf | Redis caching, pub/sub |
-| database-optimizer | database performance, index, query optimization, explain | .sql | Database performance tuning |
-| data-engineer | etl, data pipeline, airflow, spark, kafka | dags/, airflow/ | Data pipelines, ETL |
-| analytics-specialist | analytics, metrics, dashboard, reporting | .sql (analytics context) | Data analytics, BI |
+| voltagent-data-ai:postgres-pro | postgres, postgresql, psql, sql, database schema, migration | .sql, migrations/ | PostgreSQL database design, optimization |
+| voltagent-data-ai:database-optimizer | database performance, index, query optimization, explain, mysql | .sql | Database performance tuning |
+| voltagent-data-ai:data-engineer | etl, data pipeline, airflow, spark, kafka | dags/, airflow/ | Data pipelines, ETL |
+| voltagent-data-ai:ml-engineer | machine learning, ml, model, training, pytorch, tensorflow | models/, notebooks/, .ipynb | ML model development |
+| voltagent-data-ai:nlp-engineer | nlp, natural language, bert, transformers | nlp/ | Natural language processing |
 
-**Security Specialists:**
+**Frontend Specialists (voltagent-lang):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| security-engineer | security, auth, oauth, jwt, cors, csrf, xss, sql injection | security/, auth/ | Security architecture, authentication |
-| penetration-tester | penetration test, vulnerability, exploit, security scan | security-reports/ | Security testing, vulnerability assessment |
-| compliance-specialist | compliance, gdpr, hipaa, sox, audit | compliance/ | Regulatory compliance |
+| voltagent-lang:react-specialist | react, jsx, hooks, context, redux | .jsx, .tsx (react context) | React development |
+| voltagent-lang:vue-expert | vue, vuex, nuxt, composition api | .vue, nuxt.config.js | Vue.js development |
+| voltagent-lang:angular-architect | angular, rxjs, ngrx, @angular | .component.ts, angular.json | Angular development |
+| voltagent-lang:nextjs-developer | next.js, nextjs, app router, server components | next.config.js | Next.js development |
 
-**Frontend Specialists:**
+**QA & Security (voltagent-qa-sec):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| react-specialist | react, jsx, hooks, context, redux | .jsx, .tsx (react context) | React development |
-| vue-specialist | vue, vuex, nuxt, composition api | .vue, nuxt.config.js | Vue.js development |
-| angular-specialist | angular, rxjs, ngrx, @angular | .component.ts, angular.json | Angular development |
-| ui-ux-specialist | ui, ux, design system, accessibility, a11y | design/, styles/ | UI/UX design, accessibility |
-| css-expert | css, scss, sass, tailwind, styled-components | .css, .scss, .sass | Styling, CSS frameworks |
+| voltagent-qa-sec:qa-expert | testing, test, qa, quality assurance | tests/, test/ | Quality assurance, testing strategy |
+| voltagent-qa-sec:test-automator | automation, selenium, playwright, cypress | e2e/, integration/ | Test automation |
+| voltagent-qa-sec:performance-engineer | performance, load test, stress test, benchmark | performance/ | Performance testing |
+| voltagent-qa-sec:penetration-tester | penetration test, vulnerability, exploit | security-reports/ | Security testing |
 
-**Testing Specialists:**
+**Core Development (voltagent-core-dev):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| qa-engineer | testing, test, qa, quality assurance | tests/, test/ | Quality assurance, testing strategy |
-| test-automation-specialist | automation, selenium, playwright, cypress | e2e/, integration/ | Test automation |
-| performance-tester | performance, load test, stress test, benchmark | performance/ | Performance testing |
+| voltagent-core-dev:api-designer | api, rest, graphql, endpoint, openapi | api/, swagger.yml, schema.graphql | API design, REST, GraphQL |
+| voltagent-core-dev:backend-developer | backend, server, microservices | services/ | Backend development |
+| voltagent-core-dev:fullstack-developer | fullstack, full-stack | src/ | Full-stack development |
+| voltagent-core-dev:mobile-developer | mobile, ios, android, react native, flutter | .dart, pubspec.yaml | Mobile development |
 
-**Backend Specialists:**
+**Meta Specialists (voltagent-meta):**
 | Specialist | Keywords | File Extensions | Domain |
 |------------|----------|-----------------|--------|
-| api-specialist | api, rest, graphql, endpoint, openapi | api/, swagger.yml, schema.graphql | API design, REST, GraphQL |
-| microservices-architect | microservices, service mesh, istio, distributed | services/ | Microservices architecture |
-| message-queue-specialist | queue, kafka, rabbitmq, sqs, pubsub | messaging/ | Message queues, event streaming |
-
-**Meta Specialists:**
-| Specialist | Keywords | File Extensions | Domain |
-|------------|----------|-----------------|--------|
-| multi-agent-coordinator | multi-agent, coordination, workflow | workflows/ | Coordinating multiple specialists |
-| workflow-orchestrator | workflow, orchestration, state machine | workflows/ | Complex workflow orchestration |
-
-**Mobile Specialists:**
-| Specialist | Keywords | File Extensions | Domain |
-|------------|----------|-----------------|--------|
-| ios-specialist | ios, xcode, swift, objective-c | .swift, .m, .xcodeproj | iOS development |
-| android-specialist | android, kotlin, gradle, androidmanifest | .kt, build.gradle, AndroidManifest.xml | Android development |
-| flutter-specialist | flutter, dart, widget | .dart, pubspec.yaml | Flutter cross-platform |
-| react-native-specialist | react native, expo, metro | .jsx (RN context), app.json | React Native |
-
-**Machine Learning Specialists:**
-| Specialist | Keywords | File Extensions | Domain |
-|------------|----------|-----------------|--------|
-| ml-engineer | machine learning, ml, model, training | models/, notebooks/ | ML model development |
-| deep-learning-specialist | deep learning, neural network, pytorch, tensorflow | .ipynb, .pt, .h5 | Deep learning |
-| nlp-specialist | nlp, natural language, bert, transformers | nlp/ | Natural language processing |
-| computer-vision-specialist | computer vision, cv, image, opencv | vision/ | Computer vision |
-
-**Total: 50+ specialists mapped** (registry expandable to full 127+ as VoltAgent plugins installed)
+| voltagent-meta:multi-agent-coordinator | multi-agent, coordination, workflow | workflows/ | Coordinating multiple specialists |
+| voltagent-meta:workflow-orchestrator | workflow, orchestration, state machine | workflows/ | Complex workflow orchestration |
 
 **Complexity thresholds for delegation:**
 - File count: >3 files modified
@@ -143,79 +117,17 @@ VoltAgent specialist mappings for task delegation. Supports 127+ domain speciali
 - Domain expertise benefit: Specialist has clear value-add over generalist
 - Task type exclusions: Simple documentation, config changes, single-line fixes
 
-**Specialist location:** `~/.claude/agents/` (auto-loaded by Claude Code)
-**Detection method:** Filesystem check + keyword pattern matching
-**Fallback:** Direct execution when specialist unavailable (graceful degradation)
 </specialist_registry>
 
-<dynamic_specialist_registry>
-Populate available specialists at runtime to ensure only installed specialists are used for delegation.
+<specialist_availability>
+**No detection needed** - Claude Code's Task tool knows which specialists are available.
 
-**Function: populate_available_specialists()**
+When `gsd-executor` calls `Task(subagent_type="voltagent-lang:python-pro")`:
+- If specialist is installed → Task executes successfully
+- If specialist is NOT installed → Task fails gracefully → gsd-executor falls back to direct execution
 
-```bash
-populate_available_specialists() {
-  AVAILABLE_SPECIALISTS=""
-
-  # Check ~/.claude/agents/ for VoltAgent specialists
-  if [ -d "$HOME/.claude/agents" ]; then
-    for agent_file in "$HOME/.claude/agents"/*.md; do
-      if [ -f "$agent_file" ]; then
-        # Extract agent name from filename (e.g., python-pro.md -> python-pro)
-        agent_name=$(basename "$agent_file" .md)
-
-        # Filter for known VoltAgent specialists (exclude system agents like gsd-executor)
-        # VoltAgent specialists follow naming pattern: <domain>-<role> (e.g., python-pro, typescript-pro)
-        if echo "$agent_name" | grep -qE '(pro|specialist|expert|engineer|architect|tester)$'; then
-          AVAILABLE_SPECIALISTS="$AVAILABLE_SPECIALISTS $agent_name"
-        fi
-      fi
-    done
-  fi
-
-  # Also check npm global packages for voltagent-* packages
-  if command -v npm >/dev/null 2>&1; then
-    npm_specialists=$(npm list -g --depth=0 2>/dev/null | grep 'voltagent-' | sed 's/.*voltagent-\([^ @]*\).*/\1/' || echo "")
-    if [ -n "$npm_specialists" ]; then
-      AVAILABLE_SPECIALISTS="$AVAILABLE_SPECIALISTS $npm_specialists"
-    fi
-  fi
-
-  # Deduplicate and trim whitespace
-  AVAILABLE_SPECIALISTS=$(echo "$AVAILABLE_SPECIALISTS" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
-
-  echo "Available specialists: $AVAILABLE_SPECIALISTS"
-}
-```
-
-**Call during initialization** (in load_project_state step when USE_SPECIALISTS=true):
-
-```bash
-if [ "$USE_SPECIALISTS" = "true" ]; then
-  populate_available_specialists
-  # AVAILABLE_SPECIALISTS now contains space-separated list of installed specialists
-fi
-```
-
-**Validation before delegation:**
-
-```bash
-check_specialist_available() {
-  local specialist_name="$1"
-  echo "$AVAILABLE_SPECIALISTS" | grep -q "\b$specialist_name\b"
-  return $?
-}
-
-# Usage example:
-if check_specialist_available "python-pro"; then
-  # Delegate to python-pro
-else
-  # Fall back to direct execution
-fi
-```
-
-This ensures delegation only happens when the specialist is actually installed, preventing errors from missing dependencies.
-</dynamic_specialist_registry>
+This eliminates complex detection logic. Just use the full specialist name and let Claude Code handle availability.
+</specialist_availability>
 
 <domain_detection>
 Domain detection and specialist routing logic for intelligent task delegation.
@@ -245,155 +157,129 @@ detect_specialist_for_task() {
 
   # Check for specific frameworks/tools first (highest priority)
   if echo "$desc_lower" | grep -qE "django"; then
-    specialist="python-pro"  # Django is Python
+    specialist="voltagent-lang:python-pro"
   elif echo "$desc_lower" | grep -qE "fastapi"; then
-    specialist="python-pro"  # FastAPI is Python
+    specialist="voltagent-lang:python-pro"
   elif echo "$desc_lower" | grep -qE "next\.?js|nextjs"; then
-    specialist="typescript-pro"  # Next.js typically TypeScript
+    specialist="voltagent-lang:nextjs-developer"
   elif echo "$desc_lower" | grep -qE "react native"; then
-    specialist="react-native-specialist"
+    specialist="voltagent-core-dev:mobile-developer"
   elif echo "$desc_lower" | grep -qE "flutter"; then
-    specialist="flutter-specialist"
+    specialist="voltagent-lang:flutter-expert"
   elif echo "$desc_lower" | grep -qE "spring boot|spring framework"; then
-    specialist="java-specialist"
+    specialist="voltagent-lang:spring-boot-engineer"
   elif echo "$desc_lower" | grep -qE "laravel"; then
-    specialist="php-specialist"
+    specialist="voltagent-lang:laravel-specialist"
   elif echo "$desc_lower" | grep -qE "rails|ruby on rails"; then
-    specialist="ruby-specialist"
+    specialist="voltagent-lang:rails-expert"
 
   # Language specialists (medium priority)
   elif echo "$desc_lower" | grep -qE "python|pytest|pandas|numpy|scipy|pip|\.py"; then
-    specialist="python-pro"
+    specialist="voltagent-lang:python-pro"
   elif echo "$desc_lower" | grep -qE "typescript|tsx?|tsconfig"; then
-    specialist="typescript-pro"
+    specialist="voltagent-lang:typescript-pro"
   elif echo "$desc_lower" | grep -qE "golang|go (lang|module|routine|channel)|\.go"; then
-    specialist="golang-pro"
+    specialist="voltagent-lang:golang-pro"
   elif echo "$desc_lower" | grep -qE "rust|cargo|tokio|\.rs"; then
-    specialist="rust-engineer"
+    specialist="voltagent-lang:rust-engineer"
   elif echo "$desc_lower" | grep -qE "java|maven|gradle|spring|\.java"; then
-    specialist="java-specialist"
+    specialist="voltagent-lang:java-architect"
   elif echo "$desc_lower" | grep -qE "c#|csharp|dotnet|\.net|asp\.net|\.cs"; then
-    specialist="csharp-specialist"
+    specialist="voltagent-lang:csharp-developer"
   elif echo "$desc_lower" | grep -qE "javascript|node\.?js|express|npm|\.js"; then
-    specialist="javascript-expert"
+    specialist="voltagent-lang:javascript-pro"
   elif echo "$desc_lower" | grep -qE "\bruby\b|\bgem\b|bundler|\.rb"; then
-    specialist="ruby-specialist"
+    specialist="voltagent-lang:rails-expert"
   elif echo "$desc_lower" | grep -qE "php|composer|\.php"; then
-    specialist="php-specialist"
+    specialist="voltagent-lang:php-pro"
   elif echo "$desc_lower" | grep -qE "swift|ios|swiftui|xcode|\.swift"; then
-    specialist="swift-specialist"
+    specialist="voltagent-lang:swift-expert"
 
   # Infrastructure specialists
   elif echo "$desc_lower" | grep -qE "kubernetes|k8s|kubectl|deployment|helm|ingress|pod|service"; then
-    specialist="kubernetes-specialist"
+    specialist="voltagent-infra:kubernetes-specialist"
   elif echo "$desc_lower" | grep -qE "docker|dockerfile|container|compose|image"; then
-    specialist="docker-expert"
+    specialist="voltagent-infra:docker-expert"
   elif echo "$desc_lower" | grep -qE "terraform|\.tf|tfvars|tfstate"; then
-    specialist="terraform-engineer"
+    specialist="voltagent-infra:terraform-engineer"
   elif echo "$desc_lower" | grep -qE "ansible|playbook|role"; then
-    specialist="ansible-specialist"
-  elif echo "$desc_lower" | grep -qE "\baws\b|\bec2\b|\bs3\b|lambda|cloudformation|\beks\b"; then
-    specialist="aws-architect"
-  elif echo "$desc_lower" | grep -qE "azure|arm template|bicep|aks"; then
-    specialist="azure-specialist"
-  elif echo "$desc_lower" | grep -qE "gcp|google cloud|gke|cloud run"; then
-    specialist="gcp-specialist"
+    specialist="voltagent-infra:devops-engineer"
+  elif echo "$desc_lower" | grep -qE "\baws\b|\bec2\b|\bs3\b|lambda|cloudformation|\beks\b|azure|gcp|google cloud"; then
+    specialist="voltagent-infra:cloud-architect"
   elif echo "$desc_lower" | grep -qE "ci/cd|pipeline|jenkins|github actions|gitlab|\.github/workflows"; then
-    specialist="devops-engineer"
+    specialist="voltagent-infra:devops-engineer"
 
   # Data specialists
   elif echo "$desc_lower" | grep -qE "postgres(ql)?|psql|pg_"; then
-    specialist="postgres-pro"
-  elif echo "$desc_lower" | grep -qE "mysql|mariadb"; then
-    specialist="mysql-specialist"
-  elif echo "$desc_lower" | grep -qE "mongodb|mongo|nosql|document database"; then
-    specialist="mongodb-specialist"
-  elif echo "$desc_lower" | grep -qE "redis|cache|key-value"; then
-    specialist="redis-expert"
-  elif echo "$desc_lower" | grep -qE "database (performance|optimization)|index optimization|query optimization"; then
-    specialist="database-optimizer"
+    specialist="voltagent-data-ai:postgres-pro"
+  elif echo "$desc_lower" | grep -qE "mysql|mariadb|database (performance|optimization)|index optimization|query optimization"; then
+    specialist="voltagent-data-ai:database-optimizer"
   elif echo "$desc_lower" | grep -qE "\betl\b|data pipeline|airflow|spark|kafka"; then
-    specialist="data-engineer"
-  elif echo "$desc_lower" | grep -qE "analytics|metrics|dashboard|reporting|\bbi\b"; then
-    specialist="analytics-specialist"
+    specialist="voltagent-data-ai:data-engineer"
+  elif echo "$desc_lower" | grep -qE "machine learning|ml model|training|inference|deep learning|neural network|pytorch|tensorflow"; then
+    specialist="voltagent-data-ai:ml-engineer"
+  elif echo "$desc_lower" | grep -qE "\bnlp\b|natural language|bert|transformers"; then
+    specialist="voltagent-data-ai:nlp-engineer"
 
   # Security specialists
   elif echo "$desc_lower" | grep -qE "security|auth(entication|orization)?|oauth|jwt|saml|cors|csrf|xss|sql injection"; then
-    specialist="security-engineer"
+    specialist="voltagent-infra:security-engineer"
   elif echo "$desc_lower" | grep -qE "penetration test|pentest|vulnerability|exploit|security scan"; then
-    specialist="penetration-tester"
-  elif echo "$desc_lower" | grep -qE "compliance|gdpr|hipaa|sox|pci|audit"; then
-    specialist="compliance-specialist"
+    specialist="voltagent-qa-sec:penetration-tester"
 
   # Frontend specialists
   elif echo "$desc_lower" | grep -qE "react|jsx|hooks|redux"; then
-    specialist="react-specialist"
+    specialist="voltagent-lang:react-specialist"
   elif echo "$desc_lower" | grep -qE "\bvue\b|vuex|nuxt"; then
-    specialist="vue-specialist"
+    specialist="voltagent-lang:vue-expert"
   elif echo "$desc_lower" | grep -qE "angular|rxjs|ngrx"; then
-    specialist="angular-specialist"
-  elif echo "$desc_lower" | grep -qE "ui/ux|design system|accessibility|a11y"; then
-    specialist="ui-ux-specialist"
-  elif echo "$desc_lower" | grep -qE "\bcss\b|scss|sass|tailwind|styled-components"; then
-    specialist="css-expert"
+    specialist="voltagent-lang:angular-architect"
 
   # Testing specialists
   elif echo "$desc_lower" | grep -qE "testing|test suite|qa|quality assurance"; then
-    specialist="qa-engineer"
+    specialist="voltagent-qa-sec:qa-expert"
   elif echo "$desc_lower" | grep -qE "test automation|selenium|playwright|cypress"; then
-    specialist="test-automation-specialist"
+    specialist="voltagent-qa-sec:test-automator"
   elif echo "$desc_lower" | grep -qE "performance test|load test|stress test|benchmark"; then
-    specialist="performance-tester"
+    specialist="voltagent-qa-sec:performance-engineer"
 
   # Backend specialists
   elif echo "$desc_lower" | grep -qE "\bapi\b|rest|graphql|endpoint|openapi|swagger"; then
-    specialist="api-specialist"
+    specialist="voltagent-core-dev:api-designer"
   elif echo "$desc_lower" | grep -qE "microservices|service mesh|istio|distributed system"; then
-    specialist="microservices-architect"
-  elif echo "$desc_lower" | grep -qE "message queue|kafka|rabbitmq|sqs|pubsub"; then
-    specialist="message-queue-specialist"
+    specialist="voltagent-core-dev:microservices-architect"
+  elif echo "$desc_lower" | grep -qE "backend|server"; then
+    specialist="voltagent-core-dev:backend-developer"
 
   # Mobile specialists
-  elif echo "$desc_lower" | grep -qE "ios development|xcode|objective-c"; then
-    specialist="ios-specialist"
-  elif echo "$desc_lower" | grep -qE "android|kotlin|androidmanifest"; then
-    specialist="android-specialist"
+  elif echo "$desc_lower" | grep -qE "ios|android|mobile|react native|flutter"; then
+    specialist="voltagent-core-dev:mobile-developer"
 
-  # Machine Learning specialists
-  elif echo "$desc_lower" | grep -qE "machine learning|ml model|training|inference"; then
-    specialist="ml-engineer"
-  elif echo "$desc_lower" | grep -qE "deep learning|neural network|pytorch|tensorflow"; then
-    specialist="deep-learning-specialist"
-  elif echo "$desc_lower" | grep -qE "\bnlp\b|natural language|bert|transformers"; then
-    specialist="nlp-specialist"
-  elif echo "$desc_lower" | grep -qE "computer vision|image processing|opencv"; then
-    specialist="computer-vision-specialist"
-
-  # Meta specialists (lowest priority - only if no other match)
+  # Meta specialists (lowest priority)
   elif echo "$desc_lower" | grep -qE "multi-agent|agent coordination"; then
-    specialist="multi-agent-coordinator"
+    specialist="voltagent-meta:multi-agent-coordinator"
   elif echo "$desc_lower" | grep -qE "workflow orchestration|state machine"; then
-    specialist="workflow-orchestrator"
+    specialist="voltagent-meta:workflow-orchestrator"
   fi
 
   # Check file extensions for additional hints if no keyword match
   if [ -z "$specialist" ] && [ -n "$task_files" ]; then
     if echo "$task_files" | grep -qE "\.py$"; then
-      specialist="python-pro"
+      specialist="voltagent-lang:python-pro"
     elif echo "$task_files" | grep -qE "\.ts$|\.tsx$"; then
-      specialist="typescript-pro"
+      specialist="voltagent-lang:typescript-pro"
     elif echo "$task_files" | grep -qE "\.go$"; then
-      specialist="golang-pro"
+      specialist="voltagent-lang:golang-pro"
     elif echo "$task_files" | grep -qE "\.rs$"; then
-      specialist="rust-engineer"
+      specialist="voltagent-lang:rust-engineer"
     elif echo "$task_files" | grep -qE "\.java$"; then
-      specialist="java-specialist"
+      specialist="voltagent-lang:java-architect"
     elif echo "$task_files" | grep -qE "\.tf$"; then
-      specialist="terraform-engineer"
+      specialist="voltagent-infra:terraform-engineer"
     elif echo "$task_files" | grep -qE "Dockerfile$|docker-compose"; then
-      specialist="docker-expert"
+      specialist="voltagent-infra:docker-expert"
     elif echo "$task_files" | grep -qE "\.sql$"; then
-      specialist="postgres-pro"  # Default SQL to Postgres
+      specialist="voltagent-data-ai:postgres-pro"
     fi
   fi
 
@@ -599,47 +485,21 @@ This overhead is only worthwhile when specialist expertise provides clear value.
 
 **Availability checking: check_specialist_availability()**
 
-Verifies that a specialist is actually installed before delegation. Returns "available" or "unavailable".
-
-**Implementation:**
+**Simplified:** Claude Code's Task tool knows which specialists are available. No filesystem detection needed.
 
 ```bash
 check_specialist_availability() {
   local specialist_name="$1"
 
-  # Check if specialist is in AVAILABLE_SPECIALISTS list
-  # (Populated by populate_available_specialists() during initialization)
-  if echo "$AVAILABLE_SPECIALISTS" | grep -q "\b$specialist_name\b"; then
-    echo "available"
-    return 0
-  fi
-
-  # Fallback: direct filesystem check if AVAILABLE_SPECIALISTS not populated
-  if [ -f "$HOME/.claude/agents/$specialist_name.md" ]; then
-    echo "available"
-    return 0
-  fi
-
-  echo "unavailable"
-  return 1
+  # Always return "available" - Claude Code handles actual availability
+  # If specialist isn't installed, Task invocation fails gracefully
+  # and gsd-executor falls back to direct execution
+  echo "available"
+  return 0
 }
 ```
 
-**Usage pattern:**
-
-```bash
-SPECIALIST=$(detect_specialist_for_task "$TASK_DESC" "$TASK_FILES")
-
-if [ -n "$SPECIALIST" ]; then
-  AVAILABILITY=$(check_specialist_availability "$SPECIALIST")
-
-  if [ "$AVAILABILITY" = "available" ]; then
-    echo "Specialist $SPECIALIST is available for delegation"
-  else
-    echo "Specialist $SPECIALIST detected but not installed - falling back to direct execution"
-  fi
-fi
-```
+**Why this works:** VoltAgent specialists are registered as plugins (e.g., `voltagent-lang@voltagent-subagents`), not as `.md` files. Claude Code knows the full list of available subagent types. When `Task(subagent_type="voltagent-lang:python-pro")` is called, Claude handles availability - gsd-executor just catches failures and falls back.
 
 ---
 

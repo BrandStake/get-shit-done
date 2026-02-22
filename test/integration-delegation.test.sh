@@ -124,7 +124,7 @@ mock_specialist() {
   local task_prompt="$2"
 
   case "$specialist_type" in
-    python-pro)
+    python-pro|voltagent-lang:python-pro)
       cat <<'EOF'
 ```json
 {
@@ -142,7 +142,7 @@ mock_specialist() {
 ```
 EOF
       ;;
-    typescript-pro)
+    typescript-pro|voltagent-lang:typescript-pro)
       cat <<'EOF'
 ```json
 {
@@ -153,7 +153,7 @@ EOF
 ```
 EOF
       ;;
-    kubernetes-specialist)
+    kubernetes-specialist|voltagent-infra:kubernetes-specialist)
       cat <<'EOF'
 ```json
 {
@@ -164,7 +164,7 @@ EOF
 ```
 EOF
       ;;
-    golang-pro)
+    golang-pro|voltagent-lang:golang-pro)
       cat <<'EOF'
 ```json
 {
@@ -175,7 +175,7 @@ EOF
 ```
 EOF
       ;;
-    rust-engineer)
+    rust-engineer|voltagent-lang:rust-engineer)
       cat <<'EOF'
 ```json
 {
@@ -377,14 +377,14 @@ test_delegation_flow_end_to_end() {
 
   # Setup: Enable specialists and make python-pro available
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro"
 
   TASK_DESC="Implement Python FastAPI authentication endpoint"
   TASK_FILES="auth.py models.py routes.py tests.py"
 
   # Step 1: Routing decision
   ROUTE=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "auto" 2>/dev/null)
-  assert_contains "$ROUTE" "delegate:python-pro" "E2E: Routes to python-pro specialist"
+  assert_contains "$ROUTE" "delegate:voltagent-lang:python-pro" "E2E: Routes to python-pro specialist"
 
   # Step 2: Task adapter generates prompt
   PROMPT=$(gsd_task_adapter "Auth task" "$TASK_FILES" "$TASK_DESC" "pytest" "All tests pass" "python-pro")
@@ -473,19 +473,19 @@ test_fallback_specialist_unavailable() {
   echo ""
   echo -e "${YELLOW}=== Fallback: Specialist Unavailable ===${NC}"
 
+  # NOTE: With simplified VoltAgent integration, availability check always returns "available"
+  # Claude Code's Task tool handles actual availability - if specialist not installed, Task fails gracefully
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS=""  # No specialists installed
 
   TASK_DESC="Implement Python FastAPI endpoint"
   TASK_FILES="auth.py models.py routes.py tests.py"
 
   ROUTE=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "auto" 2>/dev/null)
-  assert_contains "$ROUTE" "direct:" "Routes to direct execution when specialist unavailable"
-  assert_contains "$ROUTE" "specialist_unavailable" "Reason indicates specialist unavailable"
+  # Now delegates - let Claude Code handle actual availability
+  assert_contains "$ROUTE" "delegate:" "Routes to delegation (Claude handles availability)"
 
   # Reset
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 }
 
 test_fallback_parsing_failure() {
@@ -514,7 +514,7 @@ test_fallback_feature_disabled() {
   echo -e "${YELLOW}=== Fallback: Feature Disabled ===${NC}"
 
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro voltagent-lang:typescript-pro"
 
   TASK_DESC="Implement FastAPI endpoint"
   TASK_FILES="auth.py models.py routes.py tests.py"
@@ -593,7 +593,7 @@ test_v120_execution_flow_unchanged() {
   echo -e "${YELLOW}=== v1.20 Compatibility: Execution Flow ===${NC}"
 
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro voltagent-lang:typescript-pro"
 
   TASK_DESC="Add authentication middleware"
   TASK_FILES="middleware/auth.ts"
@@ -612,7 +612,7 @@ test_v120_specialist_detection_ignored() {
   echo -e "${YELLOW}=== v1.20 Compatibility: Detection Ignored ===${NC}"
 
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS="python-pro"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro"
 
   # Specialist would be detected, but routing should ignore it
   TASK_DESC="Implement Python FastAPI endpoint"
@@ -620,7 +620,7 @@ test_v120_specialist_detection_ignored() {
 
   # Detection still works
   SPECIALIST=$(detect_specialist_for_task "$TASK_DESC" "$TASK_FILES")
-  assert_eq "python-pro" "$SPECIALIST" "v1.20: Specialist detection still works"
+  assert_eq "voltagent-lang:python-pro" "$SPECIALIST" "v1.20: Specialist detection still works"
 
   # But routing ignores it
   ROUTE=$(make_routing_decision "$TASK_DESC" "$TASK_FILES" "auto" 2>/dev/null)
@@ -673,29 +673,30 @@ test_mixed_domain_plan_routing() {
   echo -e "${YELLOW}=== Mixed-Domain: Plan Routing ===${NC}"
 
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro kubernetes-specialist"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro voltagent-lang:typescript-pro voltagent-infra:kubernetes-specialist"
 
-  # Simulate 5-task plan with different domains
+  # Simulate 5-task plan with different domains - use pipe delimiter to avoid : conflicts
   declare -a TASKS=(
-    "Implement Python FastAPI backend:auth.py models.py routes.py tests.py:python-pro"
-    "Create React frontend component:components/Auth.tsx types/user.ts:typescript-pro"
-    "Update README documentation:README.md:none"
-    "Deploy to Kubernetes cluster:k8s/deployment.yaml k8s/service.yaml k8s/ingress.yaml k8s/configmap.yaml:kubernetes-specialist"
-    "Add integration tests:tests/integration.ts tests/helpers.ts tests/fixtures.ts tests/utils.ts:typescript-pro"
+    "Implement Python FastAPI backend|auth.py models.py routes.py tests.py|voltagent-lang:python-pro"
+    "Create React frontend component|components/Auth.tsx types/user.ts|voltagent-lang:react-specialist"
+    "Update README documentation|README.md|none"
+    "Deploy to Kubernetes cluster|k8s/deployment.yaml k8s/service.yaml k8s/ingress.yaml k8s/configmap.yaml|voltagent-infra:kubernetes-specialist"
+    "Add integration tests|tests/integration.ts tests/helpers.ts tests/fixtures.ts tests/utils.ts|voltagent-lang:typescript-pro"
   )
 
   local delegated_count=0
   local direct_count=0
 
   for task in "${TASKS[@]}"; do
-    IFS=":" read -r desc files expected <<< "$task"
+    IFS="|" read -r desc files expected <<< "$task"
 
     ROUTE=$(make_routing_decision "$desc" "$files" "auto" 2>/dev/null)
     ROUTE_ACTION=$(echo "$ROUTE" | cut -d: -f1)
 
     if [ "$ROUTE_ACTION" = "delegate" ]; then
       delegated_count=$((delegated_count + 1))
-      SPECIALIST=$(echo "$ROUTE" | cut -d: -f2)
+      # Extract full specialist name (everything after first colon)
+      SPECIALIST=$(echo "$ROUTE" | sed 's/^delegate://')
 
       if [ "$expected" != "none" ]; then
         assert_eq "$expected" "$SPECIALIST" "Task routed to correct specialist: $expected"
@@ -722,7 +723,7 @@ test_mixed_domain_delegation_counts() {
   echo -e "${YELLOW}=== Mixed-Domain: Delegation Counts ===${NC}"
 
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro"
+  AVAILABLE_SPECIALISTS="voltagent-lang:python-pro voltagent-lang:typescript-pro"
 
   # Count delegated vs direct
   local python_route=$(make_routing_decision "Implement FastAPI endpoint" "a.py b.py c.py d.py" "auto" 2>/dev/null)
@@ -744,17 +745,18 @@ test_mixed_domain_specialist_variety() {
   echo -e "${YELLOW}=== Mixed-Domain: Specialist Variety ===${NC}"
 
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro golang-pro rust-engineer"
 
-  # Different specialists in same plan
-  local py=$(make_routing_decision "Implement Python API" "a.py b.py c.py d.py" "auto" 2>/dev/null | grep -o 'python-pro')
-  assert_eq "python-pro" "$py" "Python specialist used"
+  # Different specialists in same plan - extract full voltagent names from routing decision
+  local py_route=$(make_routing_decision "Implement Python API" "a.py b.py c.py d.py" "auto" 2>/dev/null)
+  assert_contains "$py_route" "voltagent-lang:python-pro" "Python specialist used"
 
-  local ts=$(make_routing_decision "Create TypeScript component" "A.tsx B.tsx C.tsx D.tsx" "auto" 2>/dev/null | grep -o 'typescript-pro')
-  assert_eq "typescript-pro" "$ts" "TypeScript specialist used"
+  local ts_route=$(make_routing_decision "Create TypeScript component" "A.tsx B.tsx C.tsx D.tsx" "auto" 2>/dev/null)
+  assert_contains "$ts_route" "voltagent-lang:typescript-pro" "TypeScript specialist used"
 
-  local go=$(make_routing_decision "Implement Go server" "main.go handler.go router.go config.go" "auto" 2>/dev/null | grep -o 'golang-pro')
-  assert_eq "golang-pro" "$go" "Golang specialist used"
+  # Note: Use "golang" or "Go lang" keyword explicitly to trigger golang-pro detection
+  # (plain "Go" could be misinterpreted; "server" matches backend-developer)
+  local go_route=$(make_routing_decision "Implement golang HTTP handlers" "main.go handler.go router.go config.go" "auto" 2>/dev/null)
+  assert_contains "$go_route" "voltagent-lang:golang-pro" "Golang specialist used"
 
   # Different specialists demonstrate variety
   echo -e "${GREEN}✓${NC} Multiple specialists used in same plan"
@@ -763,7 +765,6 @@ test_mixed_domain_specialist_variety() {
 
   # Reset
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 }
 
 #

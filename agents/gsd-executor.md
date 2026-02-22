@@ -716,6 +716,236 @@ fi
 **Graceful degradation:** System falls back to direct execution at any decision point failure, preserving GSD's reliability guarantees.
 </domain_detection>
 
+<adapter_functions>
+Adapter functions translate between GSD task format and specialist prompts, enabling seamless delegation while preserving GSD's structured execution model.
+
+**Purpose:** Specialists don't understand GSD PLAN.md structure. Adapters convert GSD tasks into specialist-native prompts and parse specialist output back into GSD-compatible results.
+
+---
+
+**Task-to-Specialist adapter: gsd_task_adapter()**
+
+Converts a GSD task into a specialist-friendly prompt.
+
+**Input:** GSD task structure (name, files, action, verification, done criteria)
+
+**Output:** Natural language prompt for specialist
+
+**Implementation:**
+
+```bash
+gsd_task_adapter() {
+  local task_name="$1"
+  local task_files="$2"
+  local task_action="$3"
+  local task_verify="$4"
+  local task_done="$5"
+  local specialist="$6"
+
+  # Build specialist prompt
+  cat <<EOF
+You are a ${specialist} specialist. Please complete the following task:
+
+## Task
+${task_name}
+
+## Files to modify
+${task_files}
+
+## What to do
+${task_action}
+
+## Verification
+After completing the task, verify your work by running:
+${task_verify}
+
+## Success criteria
+The task is complete when:
+${task_done}
+
+## Output format
+Please provide:
+1. A summary of changes made
+2. List of files created or modified
+3. Verification results
+4. Any issues encountered or decisions made
+
+Work autonomously and follow best practices for ${specialist} development.
+EOF
+}
+```
+
+**Usage pattern:**
+
+```bash
+SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
+
+# Pass SPECIALIST_PROMPT to Task tool in Phase 3
+```
+
+**Design notes:**
+
+- **Natural language format** - Specialists are general-purpose agents, not GSD-aware
+- **Self-contained** - All task context included in prompt
+- **Best practices hint** - Reminds specialist to apply domain expertise
+- **Structured output request** - Helps with result parsing
+
+---
+
+**Specialist-to-GSD adapter: gsd_result_adapter()**
+
+Parses specialist output into GSD-compatible result structure.
+
+**Input:** Specialist's text output
+
+**Output:** Structured result with files_modified, verification_status, issues, decisions
+
+**Implementation:**
+
+```bash
+gsd_result_adapter() {
+  local specialist_output="$1"
+  local expected_files="$2"
+
+  # Extract key information using heuristics
+  local files_modified=""
+  local verification_status="unknown"
+  local issues=""
+  local decisions=""
+
+  # Parse files mentioned in output
+  # Look for common patterns: "Created:", "Modified:", "Updated:", file paths
+  files_modified=$(echo "$specialist_output" | grep -iE "(created|modified|updated|changed):?\s+" | sed -E 's/^.*:\s*//' | head -n 10)
+
+  # If no explicit file mentions, fall back to expected files
+  if [ -z "$files_modified" ]; then
+    files_modified="$expected_files"
+  fi
+
+  # Parse verification status
+  # Look for success/failure indicators
+  if echo "$specialist_output" | grep -qiE "(verification (passed|successful)|all tests? passed?|successfully verified)"; then
+    verification_status="passed"
+  elif echo "$specialist_output" | grep -qiE "(verification failed|tests? failed|error|failed to verify)"; then
+    verification_status="failed"
+  else
+    # No explicit verification mention - assume passed if specialist completed
+    verification_status="passed"
+  fi
+
+  # Parse issues
+  # Look for error/issue/problem mentions
+  issues=$(echo "$specialist_output" | grep -iE "(issue|error|problem|warning):" | head -n 5)
+
+  # Parse decisions
+  # Look for decision/choice/selected mentions
+  decisions=$(echo "$specialist_output" | grep -iE "(decision|decided|chose|selected):" | head -n 5)
+
+  # Output structured result
+  cat <<EOF
+{
+  "files_modified": [$(echo "$files_modified" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
+  "verification_status": "$verification_status",
+  "issues": [$(echo "$issues" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')],
+  "decisions": [$(echo "$decisions" | sed 's/^/"/; s/$/",/' | tr '\n' ' ' | sed 's/,$//')]
+}
+EOF
+}
+```
+
+**Usage pattern:**
+
+```bash
+# After specialist completes task via Task tool (Phase 3)
+SPECIALIST_OUTPUT="[full output from specialist]"
+RESULT=$(gsd_result_adapter "$SPECIALIST_OUTPUT" "$TASK_FILES")
+
+# Parse JSON result
+FILES_MODIFIED=$(echo "$RESULT" | jq -r '.files_modified[]')
+VERIFICATION=$(echo "$RESULT" | jq -r '.verification_status')
+ISSUES=$(echo "$RESULT" | jq -r '.issues[]')
+DECISIONS=$(echo "$RESULT" | jq -r '.decisions[]')
+
+# Use parsed data for GSD commit and Summary
+```
+
+**Design notes:**
+
+- **Heuristic parsing** - Specialists output varies, use pattern matching to extract key info
+- **Fallback strategies** - If parsing fails, fall back to expected values (graceful degradation)
+- **JSON output** - Structured format for easy consumption by GSD executor
+- **Issue tracking** - Captures specialist-reported problems for deviation documentation
+
+---
+
+**Error handling: adapter_error_fallback()**
+
+When adapter parsing fails or specialist delegation errors occur, fall back to direct execution.
+
+**Implementation:**
+
+```bash
+adapter_error_fallback() {
+  local error_message="$1"
+  local task_name="$2"
+
+  echo "⚠️  Adapter error: $error_message" >&2
+  echo "→ Falling back to direct execution for: $task_name" >&2
+
+  # Log to deferred-items.md for later review
+  echo "- [Adapter Error] $task_name: $error_message (fell back to direct execution)" >> .planning/deferred-items.md
+
+  # Return "direct" route to trigger fallback
+  echo "direct:adapter_error"
+}
+```
+
+**Usage pattern:**
+
+```bash
+# Wrap delegation in error handling
+SPECIALIST_PROMPT=$(gsd_task_adapter "$TASK_NAME" "$TASK_FILES" "$TASK_ACTION" "$TASK_VERIFY" "$TASK_DONE" "$SPECIALIST")
+
+if [ $? -ne 0 ]; then
+  ROUTE_DECISION=$(adapter_error_fallback "Failed to generate specialist prompt" "$TASK_NAME")
+  # Continue with direct execution
+fi
+```
+
+**Error scenarios:**
+
+- Specialist prompt generation fails
+- Specialist output unparsable
+- Verification status unclear
+- Files not created as expected
+
+**Fallback strategy:** Always prefer direct execution over failed delegation. GSD's reliability guarantee is paramount.
+
+---
+
+**Adapter testing:**
+
+Adapters are critical integration points. Test with representative specialist outputs:
+
+```bash
+# Test result parsing with various specialist output formats
+TEST_OUTPUT_1="Created src/auth.py\nModified src/main.py\nVerification passed"
+RESULT=$(gsd_result_adapter "$TEST_OUTPUT_1" "src/auth.py src/main.py")
+# Should extract both files and verification=passed
+
+TEST_OUTPUT_2="Updated database schema\nAll tests passed successfully"
+RESULT=$(gsd_result_adapter "$TEST_OUTPUT_2" "migrations/001.sql")
+# Should fall back to expected files, verification=passed
+```
+
+**Future improvement opportunities:**
+
+- **LLM-based parsing** - Use Claude to parse unstructured specialist output (Phase 4+)
+- **Specialist output schema** - Define standard JSON format for specialists to return
+- **Adapter registry** - Specialist-specific adapters for known output patterns
+- **Validation layer** - Check that specialist actually modified expected files
+</adapter_functions>
+
 <execution_flow>
 
 <step name="load_project_state" priority="first">

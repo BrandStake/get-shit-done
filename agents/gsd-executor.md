@@ -264,7 +264,7 @@ detect_specialist_for_task() {
     specialist="csharp-specialist"
   elif echo "$desc_lower" | grep -qE "javascript|node\.?js|express|npm|\.js"; then
     specialist="javascript-expert"
-  elif echo "$desc_lower" | grep -qE "ruby|gem|bundler|\.rb"; then
+  elif echo "$desc_lower" | grep -qE "\bruby\b|\bgem\b|bundler|\.rb"; then
     specialist="ruby-specialist"
   elif echo "$desc_lower" | grep -qE "php|composer|\.php"; then
     specialist="php-specialist"
@@ -280,7 +280,7 @@ detect_specialist_for_task() {
     specialist="terraform-engineer"
   elif echo "$desc_lower" | grep -qE "ansible|playbook|role"; then
     specialist="ansible-specialist"
-  elif echo "$desc_lower" | grep -qE "aws|ec2|s3|lambda|cloudformation|eks"; then
+  elif echo "$desc_lower" | grep -qE "\baws\b|\bec2\b|\bs3\b|lambda|cloudformation|\beks\b"; then
     specialist="aws-architect"
   elif echo "$desc_lower" | grep -qE "azure|arm template|bicep|aks"; then
     specialist="azure-specialist"
@@ -300,9 +300,9 @@ detect_specialist_for_task() {
     specialist="redis-expert"
   elif echo "$desc_lower" | grep -qE "database (performance|optimization)|index optimization|query optimization"; then
     specialist="database-optimizer"
-  elif echo "$desc_lower" | grep -qE "etl|data pipeline|airflow|spark|kafka"; then
+  elif echo "$desc_lower" | grep -qE "\betl\b|data pipeline|airflow|spark|kafka"; then
     specialist="data-engineer"
-  elif echo "$desc_lower" | grep -qE "analytics|metrics|dashboard|reporting|bi"; then
+  elif echo "$desc_lower" | grep -qE "analytics|metrics|dashboard|reporting|\bbi\b"; then
     specialist="analytics-specialist"
 
   # Security specialists
@@ -316,13 +316,13 @@ detect_specialist_for_task() {
   # Frontend specialists
   elif echo "$desc_lower" | grep -qE "react|jsx|hooks|redux"; then
     specialist="react-specialist"
-  elif echo "$desc_lower" | grep -qE "vue|vuex|nuxt"; then
+  elif echo "$desc_lower" | grep -qE "\bvue\b|vuex|nuxt"; then
     specialist="vue-specialist"
   elif echo "$desc_lower" | grep -qE "angular|rxjs|ngrx"; then
     specialist="angular-specialist"
   elif echo "$desc_lower" | grep -qE "ui/ux|design system|accessibility|a11y"; then
     specialist="ui-ux-specialist"
-  elif echo "$desc_lower" | grep -qE "css|scss|sass|tailwind|styled-components"; then
+  elif echo "$desc_lower" | grep -qE "\bcss\b|scss|sass|tailwind|styled-components"; then
     specialist="css-expert"
 
   # Testing specialists
@@ -334,7 +334,7 @@ detect_specialist_for_task() {
     specialist="performance-tester"
 
   # Backend specialists
-  elif echo "$desc_lower" | grep -qE "api|rest|graphql|endpoint|openapi|swagger"; then
+  elif echo "$desc_lower" | grep -qE "\bapi\b|rest|graphql|endpoint|openapi|swagger"; then
     specialist="api-specialist"
   elif echo "$desc_lower" | grep -qE "microservices|service mesh|istio|distributed system"; then
     specialist="microservices-architect"
@@ -352,7 +352,7 @@ detect_specialist_for_task() {
     specialist="ml-engineer"
   elif echo "$desc_lower" | grep -qE "deep learning|neural network|pytorch|tensorflow"; then
     specialist="deep-learning-specialist"
-  elif echo "$desc_lower" | grep -qE "nlp|natural language|bert|transformers"; then
+  elif echo "$desc_lower" | grep -qE "\bnlp\b|natural language|bert|transformers"; then
     specialist="nlp-specialist"
   elif echo "$desc_lower" | grep -qE "computer vision|image processing|opencv"; then
     specialist="computer-vision-specialist"
@@ -470,7 +470,7 @@ should_delegate_task() {
   fi
 
   # Medium complexity indicators (+1 each)
-  if echo "$desc_lower" | grep -qE "add|modify|update|extend"; then
+  if echo "$desc_lower" | grep -qE "\badd\b|modify|update|extend"; then
     complexity_score=$((complexity_score + 1))
   fi
   if echo "$desc_lower" | grep -qE "test|validate|verify"; then

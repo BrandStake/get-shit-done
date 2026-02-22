@@ -415,6 +415,173 @@ fi
 **Performance:** Keyword matching averages <50ms per task, negligible overhead compared to task execution time.
 
 **Extensibility:** Add new patterns by inserting elif blocks in priority order. More specific patterns should appear earlier in the chain.
+
+---
+
+**Complexity evaluation: should_delegate_task()**
+
+Determines whether a task meets the complexity threshold for specialist delegation. Prevents unnecessary overhead for simple tasks.
+
+**Complexity thresholds:**
+
+1. **File count** - Task modifies >3 files (indicates substantial work)
+2. **Line count estimate** - Task involves >50 lines new/modified code
+3. **Domain expertise benefit** - Specialist would provide clear value over generalist
+4. **Task type exclusions** - Avoid delegation for simple docs, config, single-line fixes
+
+**Implementation:**
+
+```bash
+should_delegate_task() {
+  local task_desc="$1"
+  local task_files="${2:-}"
+  local specialist="$3"
+  local task_type="${4:-auto}"
+
+  # Always execute checkpoints directly (require GSD checkpoint protocol knowledge)
+  if echo "$task_type" | grep -q "checkpoint"; then
+    echo "direct"
+    echo "Reason: Checkpoints require GSD-specific protocol handling" >&2
+    return
+  fi
+
+  # Count files mentioned in task
+  local file_count=0
+  if [ -n "$task_files" ]; then
+    file_count=$(echo "$task_files" | tr ' ' '\n' | grep -v '^$' | wc -l | xargs)
+  fi
+
+  # Estimate complexity from task description keywords
+  local complexity_score=0
+  local desc_lower=$(echo "$task_desc" | tr '[:upper:]' '[:lower:]')
+
+  # High complexity indicators (+2 each)
+  if echo "$desc_lower" | grep -qE "implement|create|build|develop|design"; then
+    complexity_score=$((complexity_score + 2))
+  fi
+  if echo "$desc_lower" | grep -qE "migrate|refactor|optimize|performance"; then
+    complexity_score=$((complexity_score + 2))
+  fi
+  if echo "$desc_lower" | grep -qE "integration|pipeline|deployment|orchestration"; then
+    complexity_score=$((complexity_score + 2))
+  fi
+  if echo "$desc_lower" | grep -qE "security|authentication|authorization|encryption"; then
+    complexity_score=$((complexity_score + 2))
+  fi
+
+  # Medium complexity indicators (+1 each)
+  if echo "$desc_lower" | grep -qE "add|modify|update|extend"; then
+    complexity_score=$((complexity_score + 1))
+  fi
+  if echo "$desc_lower" | grep -qE "test|validate|verify"; then
+    complexity_score=$((complexity_score + 1))
+  fi
+
+  # Low complexity indicators (no delegation) - override score
+  if echo "$desc_lower" | grep -qE "documentation|readme|comment|typo|formatting"; then
+    echo "direct"
+    echo "Reason: Documentation/formatting changes don't benefit from specialist delegation" >&2
+    return
+  fi
+  if echo "$desc_lower" | grep -qE "single line|one line|quick fix|minor change"; then
+    echo "direct"
+    echo "Reason: Single-line changes too simple for delegation overhead" >&2
+    return
+  fi
+  if echo "$desc_lower" | grep -qE "config|configuration|env|environment variable"; then
+    # Config changes only delegate if they're complex (>3 files or high complexity)
+    if [ "$file_count" -le 3 ] && [ "$complexity_score" -lt 4 ]; then
+      echo "direct"
+      echo "Reason: Simple config change doesn't justify delegation overhead" >&2
+      return
+    fi
+  fi
+
+  # Delegation decision logic
+  local delegate="false"
+  local reason=""
+
+  # Rule 1: File count threshold (>3 files = substantial work)
+  if [ "$file_count" -gt 3 ]; then
+    delegate="true"
+    reason="File count ($file_count files) exceeds threshold (>3)"
+  fi
+
+  # Rule 2: Complexity score threshold (>4 = complex task)
+  if [ "$complexity_score" -gt 4 ]; then
+    delegate="true"
+    if [ -n "$reason" ]; then
+      reason="$reason; Complexity score ($complexity_score) exceeds threshold (>4)"
+    else
+      reason="Complexity score ($complexity_score) exceeds threshold (>4)"
+    fi
+  fi
+
+  # Rule 3: Domain expertise benefit (specialist has clear value-add)
+  if [ -n "$specialist" ]; then
+    # Check if task is in specialist's sweet spot
+    if echo "$desc_lower" | grep -qE "database schema|migration|query optimization" && [ "$specialist" = "postgres-pro" ]; then
+      delegate="true"
+      reason="${reason:+$reason; }Database expertise highly valuable for schema/migration work"
+    elif echo "$desc_lower" | grep -qE "kubernetes|k8s|deployment|helm" && [ "$specialist" = "kubernetes-specialist" ]; then
+      delegate="true"
+      reason="${reason:+$reason; }Kubernetes expertise valuable for cluster/deployment work"
+    elif echo "$desc_lower" | grep -qE "security|vulnerability|penetration" && [[ "$specialist" =~ (security-engineer|penetration-tester) ]]; then
+      delegate="true"
+      reason="${reason:+$reason; }Security expertise critical for security-related tasks"
+    elif echo "$desc_lower" | grep -qE "performance|optimization|bottleneck" && [[ "$specialist" =~ (database-optimizer|performance-tester) ]]; then
+      delegate="true"
+      reason="${reason:+$reason; }Performance expertise valuable for optimization work"
+    fi
+  fi
+
+  # Final decision
+  if [ "$delegate" = "true" ]; then
+    echo "delegate"
+    echo "Reason: $reason" >&2
+  else
+    echo "direct"
+    if [ -n "$specialist" ]; then
+      echo "Reason: Task too simple for delegation (files=$file_count, complexity=$complexity_score)" >&2
+    else
+      echo "Reason: No specialist match and insufficient complexity" >&2
+    fi
+  fi
+}
+```
+
+**Usage pattern:**
+
+```bash
+# After detecting specialist, evaluate complexity
+SPECIALIST=$(detect_specialist_for_task "$TASK_DESC" "$TASK_FILES")
+DECISION=$(should_delegate_task "$TASK_DESC" "$TASK_FILES" "$SPECIALIST" "$TASK_TYPE")
+
+if [ "$DECISION" = "delegate" ] && [ -n "$SPECIALIST" ]; then
+  # Check specialist availability
+  if check_specialist_available "$SPECIALIST"; then
+    echo "Delegating to $SPECIALIST"
+    ROUTE="delegate"
+  else
+    echo "Specialist $SPECIALIST unavailable - executing directly"
+    ROUTE="direct"
+  fi
+else
+  echo "Executing directly (complexity threshold not met)"
+  ROUTE="direct"
+fi
+```
+
+**Rationale:**
+
+Delegation adds 200-500ms overhead per task due to:
+- Context window creation for specialist
+- Adapted prompt generation
+- Result parsing and validation
+
+This overhead is only worthwhile when specialist expertise provides clear value. Simple tasks (documentation, config tweaks, single-line fixes) should execute directly to maintain GSD's performance characteristics.
+
+**Logging:** The function outputs reasoning to stderr for observability. This helps debug delegation decisions and tune thresholds based on real-world usage patterns.
 </domain_detection>
 
 <execution_flow>

@@ -1613,14 +1613,41 @@ git add src/types/user.ts
 | `refactor` | Code cleanup, no behavior change                |
 | `chore`    | Config, tooling, dependencies                   |
 
-**4. Commit:**
-```bash
-git commit -m "{type}({phase}-{plan}): {concise task description}
+**4. Commit with co-authorship attribution:**
 
-- {key change 1}
-- {key change 2}
-"
+Git commits include Co-authored-by trailer when task delegated to specialist. This follows Git standard trailer format (since Git 2.0), parsed by GitHub/GitLab for attribution.
+
+```bash
+# Check routing decision to determine co-authorship
+if [ "$ROUTE_ACTION" = "delegate" ]; then
+  # Task was delegated - include Co-authored-by trailer
+  # Format: "Co-authored-by: Name <email>" (capital C, hyphenated)
+  # Email domain "specialist@voltagent" identifies VoltAgent specialists
+  # CRITICAL: Blank line REQUIRED between commit body and trailer
+  git commit -m "$(cat <<EOF
+${COMMIT_TYPE}(${PHASE}-${PLAN}): ${TASK_DESCRIPTION}
+
+- ${KEY_CHANGE_1}
+- ${KEY_CHANGE_2}
+
+Co-authored-by: ${SPECIALIST} <specialist@voltagent>
+EOF
+)"
+else
+  # Direct execution - no co-author trailer
+  git commit -m "${COMMIT_TYPE}(${PHASE}-${PLAN}): ${TASK_DESCRIPTION}
+
+- ${KEY_CHANGE_1}
+- ${KEY_CHANGE_2}"
+fi
 ```
+
+**Co-authored-by trailer requirements:**
+- Blank line between commit body and trailer (two consecutive newlines)
+- Exact format: `Co-authored-by: Name <email>` (capital C, hyphenated)
+- Email domain: `specialist@voltagent` for all VoltAgent specialists
+- Only include when `ROUTE_ACTION = "delegate"`
+- GitHub/GitLab parse trailers and display specialist attribution in UI
 
 **5. Record hash:** `TASK_COMMIT=$(git rev-parse --short HEAD)` — track for SUMMARY.
 </task_commit_protocol>

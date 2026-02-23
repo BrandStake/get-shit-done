@@ -28,6 +28,8 @@
  *   phase-plan-index <phase>           Index plans with waves and status
  *   websearch <query>                  Search web via Brave API (if configured)
  *     [--limit N] [--freshness day|week|month]
+ *   determine-verification-tier <desc>  Get verification tier for task
+ *     <files> [--check-available]
  *
  * Phase Operations:
  *   phase next-decimal <phase>         Calculate next decimal phase number
@@ -555,6 +557,14 @@ async function main() {
       } else {
         error('Unknown agents subcommand. Available: enumerate');
       }
+      break;
+    }
+
+    case 'determine-verification-tier': {
+      const taskDescription = args[1];
+      const fileList = args[2];
+      const checkAvailable = args.includes('--check-available');
+      agents.cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable, raw);
       break;
     }
 

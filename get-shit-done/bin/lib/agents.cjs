@@ -171,10 +171,107 @@ function cmdEnumerateAgents(cwd, outputPath) {
   }
 }
 
+/**
+ * Determine verification tier based on task characteristics
+ * @param {string} taskDescription - Description of the task
+ * @param {string} fileList - Comma-separated list of files modified
+ * @param {Object} options - Additional options {checkAvailable: boolean}
+ * @returns {Object} - {tier: number, reason: string, specialists: Array<string>}
+ */
+function determineVerificationTier(taskDescription, fileList, options = {}) {
+  const description = (taskDescription || '').toLowerCase();
+  const files = (fileList || '').toLowerCase();
+  const combined = `${description} ${files}`;
+
+  // Tier 3: Critical paths requiring full verification team
+  const tier3Keywords = [
+    'security', 'auth', 'authentication', 'authorization', 'oauth',
+    'payment', 'billing', 'stripe', 'checkout', 'subscription',
+    'database', 'migration', 'schema', 'production', 'deploy',
+    'encryption', 'password', 'token', 'jwt', 'session',
+    'vulnerability', 'csrf', 'xss', 'injection', 'sanitize'
+  ];
+
+  // Tier 2: Standard features requiring code review + QA
+  const tier2Keywords = [
+    'api', 'endpoint', 'route', 'controller', 'service',
+    'business logic', 'validation', 'integration', 'webhook',
+    'error handling', 'retry', 'circuit breaker', 'rate limit',
+    'cache', 'redis', 'queue', 'worker', 'job',
+    'test', 'coverage', 'e2e', 'integration test'
+  ];
+
+  // Check for tier 3 keywords
+  for (const keyword of tier3Keywords) {
+    if (combined.includes(keyword)) {
+      return {
+        tier: 3,
+        reason: `Critical path detected: ${keyword}`,
+        specialists: ['code-reviewer', 'qa-expert', 'principal-engineer']
+      };
+    }
+  }
+
+  // Check for tier 2 keywords
+  for (const keyword of tier2Keywords) {
+    if (combined.includes(keyword)) {
+      return {
+        tier: 2,
+        reason: `Standard feature detected: ${keyword}`,
+        specialists: ['code-reviewer', 'qa-expert']
+      };
+    }
+  }
+
+  // Check if available specialists exist (optional verification)
+  if (options.checkAvailable) {
+    const agentsDir = path.join(os.homedir(), '.claude', 'agents');
+    const agents = enumerateAgents(agentsDir);
+    const agentNames = agents.map(a => a.name);
+
+    // If no code-reviewer available, skip verification
+    if (!agentNames.includes('code-reviewer')) {
+      return {
+        tier: 0,
+        reason: 'No verification specialists available',
+        specialists: []
+      };
+    }
+  }
+
+  // Default to Tier 1: Light verification
+  return {
+    tier: 1,
+    reason: 'Simple change - light review',
+    specialists: ['code-reviewer']
+  };
+}
+
+/**
+ * CLI command: determine verification tier for a task
+ * @param {string} taskDescription - Task description
+ * @param {string} fileList - File list (comma-separated or space-separated)
+ * @param {boolean} checkAvailable - Check if specialists are available
+ * @param {boolean} raw - Output raw JSON
+ */
+function cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable = false, raw = false) {
+  // Handle both comma and space separated file lists
+  const normalizedFiles = (fileList || '').replace(/,/g, ' ');
+
+  const result = determineVerificationTier(taskDescription, normalizedFiles, {
+    checkAvailable
+  });
+
+  // Use the output function which handles JSON serialization
+  output(result, raw);
+}
+
 module.exports = {
   cmdEnumerateAgents,
+  cmdDetermineVerificationTier,
   enumerateAgents,
   extractAgentMetadata,
   filterGsdSystemAgents,
   generateAvailableAgentsMd,
+  determineVerificationTier,
 };

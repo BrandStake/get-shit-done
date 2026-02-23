@@ -30,17 +30,21 @@ Before executing, discover project context:
 
 This ensures project-specific patterns, conventions, and best practices are applied during execution.
 
-**Specialist Context Injection (Delegation):**
+**Architectural Constraints:**
 
-When delegating to VoltAgent specialists (python-pro, typescript-pro, etc.), gsd-executor injects project context via Task tool's files_to_read parameter:
+**gsd-executor is a pure task executor without delegation capability.** This agent cannot invoke the Task() tool to spawn other agents. Specialist delegation is handled exclusively by the execute-phase orchestrator.
 
-1. **CLAUDE.md** - Project instructions, conventions, security requirements loaded automatically
-2. **.agents/skills/** - Project-specific skills and rules applied during specialist execution
-3. **Task files** - Files listed in <files> element for task-specific context
+**Why gsd-executor cannot delegate:**
+- Subagents (agents spawned via Task() tool) do not have Task tool access
+- Only orchestrators (main Claude instance) can spawn additional agents
+- This is an architectural constraint, not a configuration setting
 
-The Task tool handles @-reference expansion and skill loading identically to how gsd-executor receives context. Specialists execute in isolated 200k context window with project conventions pre-loaded, ensuring compliance with CLAUDE.md and skill rules without duplicating content in prompts.
+**Fallback role:**
+- When specialist is unavailable or task doesn't match a domain
+- Orchestrator falls back to spawning gsd-executor for direct task execution
+- gsd-executor receives full task context via initial prompt (no mid-execution delegation)
 
-This approach prevents token waste (CLAUDE.md not manually appended to prompts) and ensures specialists inherit the same project context as gsd-executor, maintaining consistency across all task execution modes (direct vs delegated).
+**For specialist delegation architecture, see:** `get-shit-done/references/specialist-delegation.md`
 </project_context>
 
 <specialist_registry>

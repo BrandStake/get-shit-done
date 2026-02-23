@@ -357,49 +357,71 @@ ${VERIFICATION_SUGGESTIONS}
 "
        fi
      done
+
+     # Aggregate verification results
+     echo "Aggregating verification results..."
+
+     # Determine overall verification status
+     if [ "$VERIFICATION_PASSED" = "false" ]; then
+       echo "VERIFICATION FAILED - Issues found:"
+       echo "$AGGREGATED_ISSUES"
+
+       # Ask user for decision
+       echo "Verification failed. Options:"
+       echo "1. Fix issues and retry task"
+       echo "2. Continue anyway (acknowledge technical debt)"
+       echo "3. Skip remaining tasks in this plan"
+       read -p "Choice (1/2/3): " USER_CHOICE
+
+       case $USER_CHOICE in
+         1) RETRY_TASK=true ;;
+         2) CONTINUE_WITH_DEBT=true ;;
+         3) SKIP_PLAN=true ;;
+       esac
+     else
+       echo "Verification PASSED - Task approved by all specialists"
+     fi
    fi
 
-     # Log verification results to SUMMARY.md
-     cat >> {phase_dir}/{plan_id}-SUMMARY.md << EOF
+   # Log verification results to SUMMARY.md
+   cat >> {phase_dir}/{plan_id}-SUMMARY.md << EOF
 
 ## Verification
 
 **Tier:** $TIER ($TIER_REASON)
-**Specialist:** $SPECIALISTS
-**Status:** $VERIFICATION_STATUS
+**Specialists:** ${AVAILABLE_SPECIALISTS:-None available}
+**Status:** ${VERIFICATION_PASSED}
 
-$(if [ -n "$VERIFICATION_ISSUES" ]; then
+$(if [ -n "$AGGREGATED_ISSUES" ]; then
     echo "### Issues Found"
-    echo "$VERIFICATION_ISSUES" | while read -r issue; do
-      echo "- $issue"
-    done
+    echo "$AGGREGATED_ISSUES"
   fi)
 
-$(if [ -n "$VERIFICATION_SUGGESTIONS" ]; then
+$(if [ -n "$AGGREGATED_SUGGESTIONS" ]; then
     echo "### Suggestions (non-blocking)"
-    echo "$VERIFICATION_SUGGESTIONS" | while read -r suggestion; do
-      echo "- $suggestion"
-    done
+    echo "$AGGREGATED_SUGGESTIONS"
   fi)
 EOF
 
-     # Handle verification result
-     if [ "$VERIFICATION_STATUS" = "FAIL" ]; then
-       echo "❌ Verification FAILED for plan {plan_id}"
-       echo "$VERIFICATION_RESULT"
-       # Block task completion, ask user for decision
-       echo "Verification found critical issues. Options:"
-       echo "1. 'fix' - Spawn executor to address issues"
-       echo "2. 'continue' - Accept issues and proceed (not recommended)"
-       # Wait for user response and handle accordingly
-     elif [ "$VERIFICATION_STATUS" = "WARNING" ]; then
-       echo "⚠️ Verification passed with warnings for plan {plan_id}"
-       # Warnings logged to SUMMARY.md, continue execution
-     else
-       echo "✓ Verification PASSED for plan {plan_id}"
+   # Handle verification result
+   if [ "$VERIFICATION_PASSED" = "false" ]; then
+     echo "❌ Verification FAILED for plan {plan_id}"
+
+     # Handle user choice
+     if [ "$RETRY_TASK" = "true" ]; then
+       echo "Retrying task with fixes..."
+       # Re-spawn executor to fix issues
+     elif [ "$CONTINUE_WITH_DEBT" = "true" ]; then
+       echo "⚠️ Continuing with known issues (technical debt logged)"
+     elif [ "$SKIP_PLAN" = "true" ]; then
+       echo "Skipping remaining tasks in plan"
+       # Exit plan execution
      fi
+   elif [ "$VERIFICATION_PASSED" = "true" ] && [ -n "$AGGREGATED_ISSUES" ]; then
+     echo "⚠️ Verification passed with warnings for plan {plan_id}"
+     # Warnings logged to SUMMARY.md, continue execution
    else
-     echo "Skipping verification (Tier 0 or no specialists available)"
+     echo "✓ Verification PASSED for plan {plan_id}"
    fi
    ```
 

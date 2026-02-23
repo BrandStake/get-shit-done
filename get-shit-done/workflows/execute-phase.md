@@ -95,12 +95,18 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    **{Plan ID}: {Plan Name}**
    {2-3 sentences: what this builds, technical approach, why it matters}
 
+   Specialists: {list unique specialists from SPECIALISTS array for tasks in this plan}
+
    Spawning {count} agent(s)...
    ---
    ```
 
    - Bad: "Executing terrain generation plan"
    - Good: "Procedural terrain generator using Perlin noise — creates height maps, biome zones, and collision meshes. Required before vehicle physics can interact with ground."
+
+   Example specialist listing:
+   - "Specialists: gsd-executor (all tasks)"
+   - "Specialists: python-pro (tasks 1-2), gsd-executor (task 3)"
 
 2. **Parse task-level specialist assignments and spawn executor agents:**
 

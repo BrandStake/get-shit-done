@@ -1472,60 +1472,16 @@ For each task:
        FILES_TO_READ="$FILES_TO_READ .agents/skills/"
      fi
 
-     # Add task-specific files
-     if [ -n "$TASK_FILES" ]; then
-       for file in $TASK_FILES; do
-         FILES_TO_READ="$FILES_TO_READ $file"
-       done
-     fi
-
-     # Invoke specialist via Task tool (identical pattern to gsd-executor invocation)
-     SPECIALIST_OUTPUT=$(Task(
-       subagent_type="$SPECIALIST",
-       model="${EXECUTOR_MODEL}",
-       prompt="
-<task_context>
-${SPECIALIST_PROMPT}
-</task_context>
-
-<files_to_read>
-Read these files for context:
-${FILES_TO_READ}
-
-The Task tool will automatically load CLAUDE.md (project instructions and conventions) and .agents/skills/ (project-specific rules) into your context. Follow all project guidelines during execution.
-</files_to_read>
-
-Complete this task following GSD execution rules embedded in the task prompt. Return structured output with files modified, verification results, and any deviations from plan.
-",
-       description="Task ${PHASE}-${PLAN}-${TASK_NUM} (${SPECIALIST})"
-     ))
-
-     echo "✓ Specialist completed task" >&2
-
-     # Check for checkpoint in specialist output (pass through unchanged)
-     # Specialists use same checkpoint protocol as gsd-executor - no translation needed
-     if echo "$SPECIALIST_OUTPUT" | grep -q "## CHECKPOINT REACHED"; then
-       echo "→ Specialist returned checkpoint" >&2
-
-       # Log checkpoint occurrence
-       echo "$(date -u +%Y-%m-%d,%H:%M:%S),${PHASE}-${PLAN},Task $TASK_NUM,$TASK_NAME,$SPECIALIST,checkpoint" >> .planning/delegation.log
-
-       # Pass through unchanged (specialists use same checkpoint protocol)
-       echo "$SPECIALIST_OUTPUT"
-
-       # Exit - orchestrator handles continuation
-       return
-     fi
-
-     # Parse specialist output using result adapter
-     RESULT=$(gsd_result_adapter "$SPECIALIST_OUTPUT" "$TASK_FILES")
-
-     # Extract parsed fields for commit
-     FILES_MODIFIED=$(echo "$RESULT" | jq -r '.files_modified[]' 2>/dev/null || echo "$TASK_FILES")
-     VERIFICATION_STATUS=$(echo "$RESULT" | jq -r '.verification_status' 2>/dev/null || echo "completed")
-     COMMIT_MESSAGE=$(echo "$RESULT" | jq -r '.commit_message' 2>/dev/null || echo "feat(${PHASE}-${PLAN}): ${TASK_NAME}")
-
-     # Note: Specialist execution complete, proceed to commit step (section d below)
+     # Specialist delegation removed - orchestrator handles all Task() spawning
+     # Subagents lack Task tool access (architectural constraint)
+     # See: get-shit-done/references/specialist-delegation.md
+     #
+     # This code previously attempted to invoke specialists via Task() tool,
+     # but subagents (including gsd-executor) cannot spawn other agents.
+     # Only orchestrators (main Claude instance) have Task tool access.
+     #
+     # Delegation flow: Planner → Orchestrator → Specialist → Result parsing
+     # gsd-executor role: Pure task executor, no delegation capability
      ```
 
    - **If ROUTE_ACTION = "direct":**

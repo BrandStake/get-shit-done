@@ -210,6 +210,104 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      fi
      echo "$SPECIALIST"
    }
+
+   parse_specialist_result() {
+     local RESULT="$1"
+     local TASK_NUM="$2"
+     local SPECIALIST="$3"
+     local PLAN_DIR="$4"
+     local PHASE="$5"
+     local PLAN="$6"
+
+     # Handle classifyHandoffIfNeeded error (known Claude Code bug)
+     if echo "$RESULT" | grep -qi "classifyHandoffIfNeeded is not defined"; then
+       echo "DEBUG: Detected classifyHandoffIfNeeded error (Claude Code bug), proceeding to verification" >&2
+       # Fall through to Tier 3 verification
+     fi
+
+     # Tier 1: Structured format
+     echo "DEBUG: Tier 1 - Checking structured format" >&2
+
+     if echo "$RESULT" | grep -q "^## TASK COMPLETE"; then
+       echo "DEBUG: Found ## TASK COMPLETE marker" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     if echo "$RESULT" | grep -q "^## COMPLETE"; then
+       echo "DEBUG: Found ## COMPLETE marker" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     if echo "$RESULT" | grep -q "^## DONE"; then
+       echo "DEBUG: Found ## DONE marker" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     if echo "$RESULT" | grep -q "^## FAILED"; then
+       echo "DEBUG: Found ## FAILED marker" >&2
+       echo "FAILURE"
+       return
+     fi
+
+     # Tier 2: Common patterns
+     echo "DEBUG: Tier 2 - Checking common patterns" >&2
+
+     if echo "$RESULT" | grep -qi "Task.*completed successfully"; then
+       echo "DEBUG: Found 'Task completed successfully' pattern" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     if echo "$RESULT" | grep -qi "Successfully"; then
+       echo "DEBUG: Found 'Successfully' pattern" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     if echo "$RESULT" | grep -qi "Error:"; then
+       echo "DEBUG: Found 'Error:' pattern" >&2
+       echo "FAILURE"
+       return
+     fi
+
+     if echo "$RESULT" | grep -qi "Failed:"; then
+       echo "DEBUG: Found 'Failed:' pattern" >&2
+       echo "FAILURE"
+       return
+     fi
+
+     # Tier 3: Verification fallback
+     echo "DEBUG: Tier 3 - Falling back to output verification" >&2
+
+     # Check if SUMMARY.md exists
+     if [ -f "${PLAN_DIR}/${PHASE}-${PLAN}-SUMMARY.md" ]; then
+       echo "DEBUG: Found SUMMARY.md, task likely succeeded" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     # Check for recent commits
+     RECENT_COMMITS=$(git log --oneline --all --grep="${PHASE}-${PLAN}" --since="5 minutes ago" 2>/dev/null | wc -l)
+     if [ "$RECENT_COMMITS" -gt 0 ]; then
+       echo "DEBUG: Found $RECENT_COMMITS recent commits, task likely succeeded" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     # Check for file creation patterns in output
+     if echo "$RESULT" | grep -q "created.*\.md\|wrote.*\.ts\|modified.*\.js"; then
+       echo "DEBUG: Found file creation patterns, task likely succeeded" >&2
+       echo "SUCCESS"
+       return
+     fi
+
+     # Default to failure if no evidence of success
+     echo "DEBUG: No evidence of success found" >&2
+     echo "FAILURE"
+   }
    ```
 
    **Validate all specialist assignments:**

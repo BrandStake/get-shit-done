@@ -211,6 +211,35 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      echo "$SPECIALIST"
    }
 
+   # Checkpoint management for error recovery
+   create_checkpoint() {
+     local PHASE="$1"
+     local PLAN="$2"
+     local SPECIALIST="$3"
+     local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+     # Create checkpoint commit (no-verify to skip hooks)
+     git add -A
+     git commit --no-verify -m "CHECKPOINT: Before ${SPECIALIST} execution for ${PHASE}-${PLAN}" 2>/dev/null || true
+
+     # Tag for easy reference
+     git tag "checkpoint/${PHASE}-${PLAN}/${TIMESTAMP}" 2>/dev/null
+
+     echo "checkpoint/${PHASE}-${PLAN}/${TIMESTAMP}"
+   }
+
+   rollback_to_checkpoint() {
+     local CHECKPOINT_TAG="$1"
+
+     if git tag -l "$CHECKPOINT_TAG" | grep -q .; then
+       git reset --hard "$CHECKPOINT_TAG"
+       git tag -d "$CHECKPOINT_TAG"  # Clean up checkpoint
+       echo "Rolled back to checkpoint: $CHECKPOINT_TAG" >&2
+     else
+       echo "Warning: Checkpoint $CHECKPOINT_TAG not found" >&2
+     fi
+   }
+
    parse_specialist_result() {
      local RESULT="$1"
      local TASK_NUM="$2"

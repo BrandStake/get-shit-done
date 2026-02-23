@@ -81,37 +81,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | TBD | Pending |
-| DISC-02 | TBD | Pending |
-| DISC-03 | TBD | Pending |
-| DISC-04 | TBD | Pending |
-| PLAN-01 | TBD | Pending |
-| PLAN-02 | TBD | Pending |
-| PLAN-03 | TBD | Pending |
-| PLAN-04 | TBD | Pending |
-| PLAN-05 | TBD | Pending |
-| SPAWN-01 | TBD | Pending |
-| SPAWN-02 | TBD | Pending |
-| SPAWN-03 | TBD | Pending |
-| SPAWN-04 | TBD | Pending |
-| SPAWN-05 | TBD | Pending |
-| RESULT-01 | TBD | Pending |
-| RESULT-02 | TBD | Pending |
-| RESULT-03 | TBD | Pending |
-| RESULT-04 | TBD | Pending |
-| ERROR-01 | TBD | Pending |
-| ERROR-02 | TBD | Pending |
-| ERROR-03 | TBD | Pending |
-| ERROR-04 | TBD | Pending |
-| ERROR-05 | TBD | Pending |
-| CLEAN-01 | TBD | Pending |
-| CLEAN-02 | TBD | Pending |
+| DISC-01 | Phase 7 | Pending |
+| DISC-02 | Phase 7 | Pending |
+| DISC-03 | Phase 7 | Pending |
+| DISC-04 | Phase 7 | Pending |
+| PLAN-01 | Phase 7 | Pending |
+| PLAN-02 | Phase 7 | Pending |
+| PLAN-03 | Phase 7 | Pending |
+| PLAN-04 | Phase 7 | Pending |
+| PLAN-05 | Phase 7 | Pending |
+| SPAWN-01 | Phase 8 | Pending |
+| SPAWN-02 | Phase 8 | Pending |
+| SPAWN-03 | Phase 8 | Pending |
+| SPAWN-04 | Phase 8 | Pending |
+| SPAWN-05 | Phase 8 | Pending |
+| RESULT-01 | Phase 9 | Pending |
+| RESULT-02 | Phase 9 | Pending |
+| RESULT-03 | Phase 9 | Pending |
+| RESULT-04 | Phase 9 | Pending |
+| ERROR-01 | Phase 10 | Pending |
+| ERROR-02 | Phase 10 | Pending |
+| ERROR-03 | Phase 10 | Pending |
+| ERROR-04 | Phase 10 | Pending |
+| ERROR-05 | Phase 10 | Pending |
+| CLEAN-01 | Phase 10 | Pending |
+| CLEAN-02 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.22 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after initial definition*
+*Last updated: 2026-02-22 after roadmap creation*

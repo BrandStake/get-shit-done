@@ -188,6 +188,36 @@ Every task has four required fields:
 
 **Automation-first rule:** If Claude CAN do it via CLI/API, Claude MUST do it. Checkpoints verify AFTER automation, not replace it.
 
+## Task Verification Control
+
+Tasks can include optional `verification_tier` attribute to control post-execution verification:
+
+```xml
+<task type="auto" verification_tier="3">
+  <name>Implement OAuth2 authentication</name>
+  <files>src/auth/oauth.ts</files>
+  <action>High-security task requiring full verification team</action>
+  <verify>npm test auth</verify>
+  <done>OAuth2 flow working with PKCE</done>
+</task>
+```
+
+**verification_tier:** Override automatic tier detection
+- `0` - Skip verification for this task (use sparingly)
+- `1` - Light verification (code-reviewer only)
+- `2` - Standard verification (code-reviewer + qa-expert)
+- `3` - Deep verification (full team in sequence)
+
+If not specified, tier is automatically determined based on task content:
+- Security/auth/payment/database keywords → Tier 3
+- API/business logic/integration keywords → Tier 2
+- Simple changes → Tier 1
+
+**When to use explicit tiers:**
+- Force Tier 3 for critical paths regardless of keywords
+- Set Tier 0 to skip verification for documentation-only tasks
+- Override detection when you know verification needs better than keyword matching
+
 ## Task Sizing
 
 Each task: **15-60 minutes** Claude execution time.

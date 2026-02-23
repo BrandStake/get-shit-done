@@ -29,7 +29,7 @@
  *   websearch <query>                  Search web via Brave API (if configured)
  *     [--limit N] [--freshness day|week|month]
  *   determine-verification-tier <desc>  Get verification tier for task
- *     <files> [--check-available]
+ *     <files> [--check-available] [--tier N]
  *
  * Phase Operations:
  *   phase next-decimal <phase>         Calculate next decimal phase number
@@ -564,7 +564,9 @@ async function main() {
       const taskDescription = args[1];
       const fileList = args[2];
       const checkAvailable = args.includes('--check-available');
-      agents.cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable, raw);
+      const tierIdx = args.indexOf('--tier');
+      const overrideTier = tierIdx !== -1 ? parseInt(args[tierIdx + 1], 10) : null;
+      agents.cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable, overrideTier, raw);
       break;
     }
 

@@ -175,10 +175,40 @@ function cmdEnumerateAgents(cwd, outputPath) {
  * Determine verification tier based on task characteristics
  * @param {string} taskDescription - Description of the task
  * @param {string} fileList - Comma-separated list of files modified
- * @param {Object} options - Additional options {checkAvailable: boolean}
+ * @param {Object} options - Additional options {checkAvailable: boolean, overrideTier: number}
  * @returns {Object} - {tier: number, reason: string, specialists: Array<string>}
  */
 function determineVerificationTier(taskDescription, fileList, options = {}) {
+  // Check for explicit tier override first
+  if (options.overrideTier !== undefined && options.overrideTier !== null) {
+    const tier = parseInt(options.overrideTier, 10);
+    if (tier === 0) {
+      return {
+        tier: 0,
+        reason: 'Explicitly skipped via verification_tier=0',
+        specialists: []
+      };
+    } else if (tier === 1) {
+      return {
+        tier: 1,
+        reason: 'Explicitly set to Tier 1 via verification_tier',
+        specialists: ['code-reviewer']
+      };
+    } else if (tier === 2) {
+      return {
+        tier: 2,
+        reason: 'Explicitly set to Tier 2 via verification_tier',
+        specialists: ['code-reviewer', 'qa-expert']
+      };
+    } else if (tier === 3) {
+      return {
+        tier: 3,
+        reason: 'Explicitly set to Tier 3 via verification_tier',
+        specialists: ['code-reviewer', 'qa-expert', 'principal-engineer']
+      };
+    }
+  }
+
   const description = (taskDescription || '').toLowerCase();
   const files = (fileList || '').toLowerCase();
   const combined = `${description} ${files}`;
@@ -252,14 +282,16 @@ function determineVerificationTier(taskDescription, fileList, options = {}) {
  * @param {string} taskDescription - Task description
  * @param {string} fileList - File list (comma-separated or space-separated)
  * @param {boolean} checkAvailable - Check if specialists are available
+ * @param {number} overrideTier - Override tier from task attribute
  * @param {boolean} raw - Output raw JSON
  */
-function cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable = false, raw = false) {
+function cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable = false, overrideTier = null, raw = false) {
   // Handle both comma and space separated file lists
   const normalizedFiles = (fileList || '').replace(/,/g, ' ');
 
   const result = determineVerificationTier(taskDescription, normalizedFiles, {
-    checkAvailable
+    checkAvailable,
+    overrideTier
   });
 
   // Use the output function which handles JSON serialization

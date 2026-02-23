@@ -398,6 +398,29 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    # Store raw output for debugging
    echo "$SPECIALIST_RESULT" > "${PHASE_DIR}/${PHASE_NUMBER}-${PLAN}-RESULT.txt"
 
+   # Update state via gsd-tools (never write directly to STATE.md)
+   if [ "$TASK_STATUS" = "SUCCESS" ]; then
+     # Record task completion
+     node ~/.claude/get-shit-done/bin/gsd-tools.cjs state record-metric \
+       --phase "${PHASE_NUMBER}" \
+       --plan "${PLAN}" \
+       --task "${TASK_NUM:-plan}" \
+       --specialist "${CURRENT_SPECIALIST}" \
+       --duration "${TASK_DURATION:-0}"
+
+     # Add any decisions from specialist output
+     if echo "$SPECIALIST_RESULT" | grep -q "Decision:"; then
+       DECISION=$(echo "$SPECIALIST_RESULT" | grep "Decision:" | sed 's/.*Decision: //')
+       node ~/.claude/get-shit-done/bin/gsd-tools.cjs state add-decision \
+         --phase "${PHASE_NUMBER}" \
+         --summary "${DECISION}" \
+         --specialist "${CURRENT_SPECIALIST}"
+     fi
+
+     # Update progress
+     node ~/.claude/get-shit-done/bin/gsd-tools.cjs state update-progress
+   fi
+
    # Handle failure
    if [ "$TASK_STATUS" = "FAILURE" ]; then
      echo "Plan {plan_id} failed, checking fallback options..."

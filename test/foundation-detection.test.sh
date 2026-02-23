@@ -154,35 +154,35 @@ test_domain_detection() {
 
   # Python detection
   local result=$(detect_specialist_for_task "Implement Python FastAPI endpoint" "")
-  assert_eq "python-pro" "$result" "Detects Python specialist for FastAPI task"
+  assert_eq "voltagent-lang:python-pro" "$result" "Detects Python specialist for FastAPI task"
 
   result=$(detect_specialist_for_task "Add pytest tests for authentication" "")
-  assert_eq "python-pro" "$result" "Detects Python specialist for pytest task"
+  assert_eq "voltagent-lang:python-pro" "$result" "Detects Python specialist for pytest task"
 
   result=$(detect_specialist_for_task "Create Django model for users" "")
-  assert_eq "python-pro" "$result" "Detects Python specialist for Django task"
+  assert_eq "voltagent-lang:python-pro" "$result" "Detects Python specialist for Django task"
 
-  # TypeScript detection
+  # TypeScript/Next.js detection
   result=$(detect_specialist_for_task "Build Next.js dashboard component" "")
-  assert_eq "typescript-pro" "$result" "Detects TypeScript specialist for Next.js task"
+  assert_eq "voltagent-lang:nextjs-developer" "$result" "Detects Next.js specialist for Next.js task"
 
   result=$(detect_specialist_for_task "Add React hooks for state management" "")
-  assert_eq "react-specialist" "$result" "Detects React specialist for hooks task"
+  assert_eq "voltagent-lang:react-specialist" "$result" "Detects React specialist for hooks task"
 
   # Kubernetes detection
   result=$(detect_specialist_for_task "Create Kubernetes deployment for microservice" "")
-  assert_eq "kubernetes-specialist" "$result" "Detects Kubernetes specialist for deployment task"
+  assert_eq "voltagent-infra:kubernetes-specialist" "$result" "Detects Kubernetes specialist for deployment task"
 
   result=$(detect_specialist_for_task "Configure k8s ingress rules" "")
-  assert_eq "kubernetes-specialist" "$result" "Detects Kubernetes specialist for k8s task"
+  assert_eq "voltagent-infra:kubernetes-specialist" "$result" "Detects Kubernetes specialist for k8s task"
 
   # Database detection
   result=$(detect_specialist_for_task "Optimize PostgreSQL query performance" "")
-  assert_eq "postgres-pro" "$result" "Detects Postgres specialist for query optimization"
+  assert_eq "voltagent-data-ai:postgres-pro" "$result" "Detects Postgres specialist for query optimization"
 
   # Security detection
   result=$(detect_specialist_for_task "Implement OAuth2 authentication flow" "")
-  assert_eq "security-engineer" "$result" "Detects Security specialist for OAuth task"
+  assert_eq "voltagent-infra:security-engineer" "$result" "Detects Security specialist for OAuth task"
 
   # No match cases
   result=$(detect_specialist_for_task "Update README documentation" "")
@@ -202,26 +202,26 @@ test_file_extension_detection() {
 
   # Python file extensions
   local result=$(detect_specialist_for_task "Update user profile logic" "src/profile.py src/models.py")
-  assert_eq "python-pro" "$result" "Detects Python specialist from .py extension"
+  assert_eq "voltagent-lang:python-pro" "$result" "Detects Python specialist from .py extension"
 
   # TypeScript file extensions
   result=$(detect_specialist_for_task "Refactor component" "components/Header.tsx")
-  assert_eq "typescript-pro" "$result" "Detects TypeScript specialist from .tsx extension"
+  assert_eq "voltagent-lang:typescript-pro" "$result" "Detects TypeScript specialist from .tsx extension"
 
   result=$(detect_specialist_for_task "Update types" "types/user.ts")
-  assert_eq "typescript-pro" "$result" "Detects TypeScript specialist from .ts extension"
+  assert_eq "voltagent-lang:typescript-pro" "$result" "Detects TypeScript specialist from .ts extension"
 
-  # Go file extensions
-  result=$(detect_specialist_for_task "Update server" "main.go handlers.go")
-  assert_eq "golang-pro" "$result" "Detects Golang specialist from .go extension"
+  # Go file extensions - use task desc without keyword match to test file extension fallback
+  result=$(detect_specialist_for_task "Update code" "main.go handlers.go")
+  assert_eq "voltagent-lang:golang-pro" "$result" "Detects Golang specialist from .go extension"
 
   # Terraform file extensions
-  result=$(detect_specialist_for_task "Update infrastructure" "main.tf variables.tf")
-  assert_eq "terraform-engineer" "$result" "Detects Terraform specialist from .tf extension"
+  result=$(detect_specialist_for_task "Update infra config" "main.tf variables.tf")
+  assert_eq "voltagent-infra:terraform-engineer" "$result" "Detects Terraform specialist from .tf extension"
 
   # SQL file extensions
   result=$(detect_specialist_for_task "Add migration" "migrations/001_add_users.sql")
-  assert_eq "postgres-pro" "$result" "Detects Postgres specialist from .sql extension"
+  assert_eq "voltagent-data-ai:postgres-pro" "$result" "Detects Postgres specialist from .sql extension"
 }
 
 #
@@ -265,25 +265,24 @@ test_availability_checking() {
   echo ""
   echo -e "${YELLOW}=== Availability Checking Tests ===${NC}"
 
-  # Setup: Create mock specialist registry
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro kubernetes-specialist"
+  # NOTE: With the simplified VoltAgent integration, check_specialist_availability always
+  # returns "available" because Claude Code's Task tool handles actual availability.
+  # If a specialist isn't installed, the Task call fails gracefully and gsd-executor
+  # falls back to direct execution.
 
-  # Test available specialist
-  local result=$(check_specialist_availability "python-pro")
+  # Test that all specialists return "available" (Claude Code handles real availability)
+  local result=$(check_specialist_availability "voltagent-lang:python-pro")
   assert_eq "available" "$result" "Returns 'available' for specialist in registry"
 
-  result=$(check_specialist_availability "typescript-pro")
+  result=$(check_specialist_availability "voltagent-lang:typescript-pro")
   assert_eq "available" "$result" "Returns 'available' for TypeScript specialist"
 
-  # Test unavailable specialist
-  result=$(check_specialist_availability "rust-engineer")
-  assert_eq "unavailable" "$result" "Returns 'unavailable' for specialist not in registry"
+  # Even uninstalled specialists return "available" - Claude Code handles actual availability
+  result=$(check_specialist_availability "voltagent-lang:rust-engineer")
+  assert_eq "available" "$result" "Returns 'available' (Claude Code handles actual availability)"
 
-  result=$(check_specialist_availability "golang-pro")
-  assert_eq "unavailable" "$result" "Returns 'unavailable' for uninstalled specialist"
-
-  # Reset registry
-  AVAILABLE_SPECIALISTS=""
+  result=$(check_specialist_availability "voltagent-lang:golang-pro")
+  assert_eq "available" "$result" "Returns 'available' (delegate, let Task tool fail gracefully)"
 }
 
 #
@@ -294,9 +293,8 @@ test_routing_decisions() {
   echo ""
   echo -e "${YELLOW}=== Routing Decision Tests ===${NC}"
 
-  # Setup: Enable specialists and populate registry
+  # Setup: Enable specialists (availability always returns "available" now)
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro typescript-pro kubernetes-specialist postgres-pro"
 
   # Test successful delegation (capture only stdout, not stderr)
   local result=$(make_routing_decision "Implement FastAPI authentication with 5 files" "auth.py models.py routes.py tests.py config.py" "auto" 2>/dev/null)
@@ -312,13 +310,12 @@ test_routing_decisions() {
   result=$(make_routing_decision "Update README" "README.md" "auto" 2>/dev/null)
   assert_contains "$result" "direct:" "Routes to direct execution when no specialist match"
 
-  # Test specialist unavailable
+  # Test Rust - should now delegate since availability always returns "available"
   result=$(make_routing_decision "Implement Rust server" "main.rs server.rs config.rs handlers.rs" "auto" 2>/dev/null)
-  assert_contains "$result" "direct:" "Routes to direct execution when specialist unavailable"
+  assert_contains "$result" "delegate:" "Routes to delegation (Claude handles availability)"
 
   # Reset
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 }
 
 #
@@ -376,30 +373,28 @@ test_end_to_end_integration() {
 
   # Simulate full task routing workflow
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS="python-pro"
 
   local task_desc="Implement Python FastAPI authentication endpoint"
   local task_files="auth.py models.py routes.py tests.py"
 
-  # Step 1: Detect specialist
+  # Step 1: Detect specialist - now returns full voltagent name
   local specialist=$(detect_specialist_for_task "$task_desc" "$task_files")
-  assert_eq "python-pro" "$specialist" "E2E: Specialist detection"
+  assert_eq "voltagent-lang:python-pro" "$specialist" "E2E: Specialist detection"
 
   # Step 2: Check complexity
   local complexity=$(should_delegate_task "$task_desc" "$task_files" "$specialist" "auto")
   assert_eq "delegate" "$complexity" "E2E: Complexity evaluation"
 
-  # Step 3: Check availability
+  # Step 3: Check availability - always returns "available" now
   local availability=$(check_specialist_availability "$specialist")
   assert_eq "available" "$availability" "E2E: Availability check"
 
   # Step 4: Make routing decision (capture only stdout)
   local route=$(make_routing_decision "$task_desc" "$task_files" "auto" 2>/dev/null)
-  assert_contains "$route" "delegate:python-pro" "E2E: Final routing decision"
+  assert_contains "$route" "delegate:voltagent-lang:python-pro" "E2E: Final routing decision"
 
   # Reset
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 }
 
 #
@@ -412,37 +407,29 @@ test_v120_compatibility() {
 
   # Test with default config (use_specialists=false)
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 
   local result=$(make_routing_decision "Implement FastAPI endpoint" "auth.py models.py routes.py tests.py" "auto" 2>/dev/null)
   assert_contains "$result" "direct:" "With use_specialists=false, routes to direct execution"
 
   # Test that specialist detection still works but doesn't affect routing
   local specialist=$(detect_specialist_for_task "Implement Python endpoint" "auth.py")
-  assert_eq "python-pro" "$specialist" "Specialist detection works even when disabled"
+  assert_eq "voltagent-lang:python-pro" "$specialist" "Specialist detection works even when disabled"
 
   result=$(make_routing_decision "Implement Python endpoint" "auth.py" "auto" 2>/dev/null)
   assert_contains "$result" "direct:" "Despite specialist match, routes to direct when disabled"
 
-  # Test with no VoltAgent installed (empty registry)
+  # Test with specialists enabled - now delegates since availability always returns "available"
   USE_SPECIALISTS="true"
-  AVAILABLE_SPECIALISTS=""
 
   result=$(make_routing_decision "Implement FastAPI endpoint" "auth.py models.py routes.py tests.py" "auto" 2>/dev/null)
-  assert_contains "$result" "direct:" "With no specialists installed, falls back to direct execution"
+  assert_contains "$result" "delegate:" "With specialists enabled, delegates to specialist"
 
-  # Test with partial installation (only some specialists available)
-  AVAILABLE_SPECIALISTS="python-pro"  # Only Python specialist installed
-
-  result=$(make_routing_decision "Implement FastAPI endpoint" "auth.py models.py routes.py tests.py" "auto" 2>/dev/null)
-  assert_contains "$result" "delegate:python-pro" "Delegates to available specialist"
-
+  # Test Kubernetes task delegates too (Claude Code handles actual availability)
   result=$(make_routing_decision "Deploy Kubernetes cluster" "deployment.yaml service.yaml ingress.yaml configmap.yaml" "auto" 2>/dev/null)
-  assert_contains "$result" "direct:" "Falls back to direct when specialist not installed"
+  assert_contains "$result" "delegate:" "Delegates to Kubernetes specialist (Claude handles availability)"
 
   # Reset
   USE_SPECIALISTS="false"
-  AVAILABLE_SPECIALISTS=""
 }
 
 #

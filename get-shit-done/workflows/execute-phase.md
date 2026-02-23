@@ -200,6 +200,45 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    TIER_INFO=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs determine-verification-tier "$TASK_DESC" "$MODIFIED_FILES" --check-available --raw)
    TIER=$(echo "$TIER_INFO" | jq -r '.tier')
    SPECIALISTS=$(echo "$TIER_INFO" | jq -r '.specialists[]' | head -n 1)
+   TIER_REASON=$(echo "$TIER_INFO" | jq -r '.reason')
+
+   # Generate verification brief before spawning specialist
+   cat > /tmp/verification-brief.md << EOF
+# Verification Brief
+
+## Task: {task_name from plan}
+**Plan:** {plan_id}
+**Type:** {task_type from plan}
+**Tier:** $TIER ($TIER_REASON)
+
+## What was built
+$TASK_DESC
+
+## Files modified
+$MODIFIED_FILES
+
+## Verification focus
+Based on Tier $TIER, focus on:
+$(if [ "$TIER" = "1" ]; then
+    echo "- Code quality and consistent patterns"
+    echo "- Obvious bugs or logic errors"
+    echo "- Basic error handling"
+  elif [ "$TIER" = "2" ]; then
+    echo "- Code quality and patterns"
+    echo "- Test coverage and edge cases"
+    echo "- Comprehensive error handling"
+    echo "- Integration points"
+  elif [ "$TIER" = "3" ]; then
+    echo "- Security vulnerabilities and attack vectors"
+    echo "- Performance and scalability concerns"
+    echo "- Production readiness and monitoring"
+    echo "- Complete test coverage"
+    echo "- Error recovery and resilience"
+  fi)
+
+## Success criteria from plan
+{Extract done criteria from task in plan file}
+EOF
 
    # If tier > 0, spawn verification specialist
    if [ "$TIER" -gt "0" ] && [ -n "$SPECIALISTS" ]; then
@@ -215,6 +254,7 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
          </objective>
 
          <files_to_read>
+         - /tmp/verification-brief.md (Verification context and focus)
          - {phase_dir}/{plan_file} (Plan requirements)
          - {phase_dir}/{plan_id}-SUMMARY.md (What was built)
          - {modified_files from SUMMARY.md} (Changed code to review)
@@ -236,17 +276,45 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
 
      # Parse verification result
      VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)
+     VERIFICATION_ISSUES=$(echo "$VERIFICATION_RESULT" | sed -n '/issues:/,/suggestions:/p' | grep "^- " | sed 's/^- //')
+     VERIFICATION_SUGGESTIONS=$(echo "$VERIFICATION_RESULT" | sed -n '/suggestions:/,$p' | grep "^- " | sed 's/^- //')
+
+     # Log verification results to SUMMARY.md
+     cat >> {phase_dir}/{plan_id}-SUMMARY.md << EOF
+
+## Verification
+
+**Tier:** $TIER ($TIER_REASON)
+**Specialist:** $SPECIALISTS
+**Status:** $VERIFICATION_STATUS
+
+$(if [ -n "$VERIFICATION_ISSUES" ]; then
+    echo "### Issues Found"
+    echo "$VERIFICATION_ISSUES" | while read -r issue; do
+      echo "- $issue"
+    done
+  fi)
+
+$(if [ -n "$VERIFICATION_SUGGESTIONS" ]; then
+    echo "### Suggestions (non-blocking)"
+    echo "$VERIFICATION_SUGGESTIONS" | while read -r suggestion; do
+      echo "- $suggestion"
+    done
+  fi)
+EOF
 
      # Handle verification result
      if [ "$VERIFICATION_STATUS" = "FAIL" ]; then
        echo "❌ Verification FAILED for plan {plan_id}"
        echo "$VERIFICATION_RESULT"
-       # Ask user: "Fix issues or continue?"
-       # If fix: spawn executor to address issues
-       # If continue: log warning and proceed
+       # Block task completion, ask user for decision
+       echo "Verification found critical issues. Options:"
+       echo "1. 'fix' - Spawn executor to address issues"
+       echo "2. 'continue' - Accept issues and proceed (not recommended)"
+       # Wait for user response and handle accordingly
      elif [ "$VERIFICATION_STATUS" = "WARNING" ]; then
        echo "⚠️ Verification passed with warnings for plan {plan_id}"
-       # Log warnings to SUMMARY.md and continue
+       # Warnings logged to SUMMARY.md, continue execution
      else
        echo "✓ Verification PASSED for plan {plan_id}"
      fi

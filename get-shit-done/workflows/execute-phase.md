@@ -192,6 +192,26 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    After each task completes successfully, determine verification needs:
 
    ```bash
+   # Load verification configuration
+   VERIFICATION_CONFIG=$(cat .planning/config.json 2>/dev/null | jq '.verification // {}')
+   VERIFICATION_ENABLED=$(echo "$VERIFICATION_CONFIG" | jq -r '.enabled // true')
+   DEFAULT_TIER=$(echo "$VERIFICATION_CONFIG" | jq -r '.default_tier // 1')
+   TIER_OVERRIDES=$(echo "$VERIFICATION_CONFIG" | jq -r '.tier_overrides // {}')
+   REQUIRED_SPECIALISTS=$(echo "$VERIFICATION_CONFIG" | jq -r '.required_specialists[]' 2>/dev/null)
+   FAIL_ON_MISSING=$(echo "$VERIFICATION_CONFIG" | jq -r '.fail_on_missing_required // false')
+
+   # Check if verification is enabled
+   if [ "$VERIFICATION_ENABLED" = "false" ]; then
+     echo "Verification disabled in config.json, skipping"
+     continue
+   fi
+
+   # Check for environment override
+   if [ "$SKIP_VERIFICATION" = "true" ]; then
+     echo "SKIP_VERIFICATION set, bypassing verification"
+     continue
+   fi
+
    # Extract task description and modified files from SUMMARY.md
    TASK_DESC=$(grep -A 2 "## What Was Built" {phase_dir}/{plan_id}-SUMMARY.md | tail -n 1)
    MODIFIED_FILES=$(grep -A 10 "key-files:" {phase_dir}/{plan_id}-SUMMARY.md | grep "  - " | sed 's/  - //' | tr '\n' ' ')
@@ -200,6 +220,17 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    TIER_INFO=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs determine-verification-tier "$TASK_DESC" "$MODIFIED_FILES" --check-available --raw)
    TIER=$(echo "$TIER_INFO" | jq -r '.tier')
    TIER_REASON=$(echo "$TIER_INFO" | jq -r '.reason')
+
+   # Check for config-based tier overrides
+   for KEYWORD in authentication payments database security; do
+     if echo "$TASK_DESC" | grep -qi "$KEYWORD"; then
+       OVERRIDE_TIER=$(echo "$TIER_OVERRIDES" | jq -r ".${KEYWORD} // 0")
+       if [ "$OVERRIDE_TIER" -gt 0 ]; then
+         echo "Config override: $KEYWORD tasks use Tier $OVERRIDE_TIER"
+         TIER=$OVERRIDE_TIER
+       fi
+     fi
+   done
 
    # Generate specialist list based on tier
    case $TIER in
@@ -218,6 +249,26 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        echo "Warning: ${SPECIALIST} not available" >&2
      fi
    done
+
+   # Check required specialists availability
+   SKIP_VERIFICATION=false
+   for SPECIALIST in $REQUIRED_SPECIALISTS; do
+     if ! grep -q "^- \*\*${SPECIALIST}\*\*:" .planning/available_agents.md 2>/dev/null; then
+       if [ "$FAIL_ON_MISSING" = "true" ]; then
+         echo "ERROR: Required specialist ${SPECIALIST} not available"
+         exit 1
+       else
+         echo "Warning: Required specialist ${SPECIALIST} not available, skipping verification"
+         SKIP_VERIFICATION=true
+       fi
+     fi
+   done
+
+   # Skip if required specialists missing
+   if [ "$SKIP_VERIFICATION" = "true" ]; then
+     echo "Skipping verification due to missing required specialists"
+     continue
+   fi
 
    # Log the verification plan
    echo "Verification Tier $TIER detected - Specialists: $AVAILABLE_SPECIALISTS"

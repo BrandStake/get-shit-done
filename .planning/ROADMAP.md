@@ -121,11 +121,11 @@ Plans:
   2. Orchestrator updates STATE.md via gsd-tools (single-writer pattern preserved)
   3. Orchestrator tracks specialist metadata in task summaries
   4. Co-authored commits include specialist attribution (Co-Authored-By: Specialist)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: TBD during planning
-- [ ] 09-02: TBD during planning
+- [ ] 09-01-PLAN.md — Multi-layer result parsing with fallback strategies
+- [ ] 09-02-PLAN.md — State management via gsd-tools and attribution tracking
 
 ### Phase 10: Error Recovery & Cleanup (Graceful Fallback & Robustness)
 **Goal**: System handles specialist failures gracefully and cleans up broken code
@@ -153,5 +153,5 @@ Phases execute in numeric order: 7 → 07.1 → 8 → 9 → 10
 | 7. Infrastructure | 2/2 | Complete | 2026-02-23 |
 | 07.1. VoltAgent Verification Teams | 2/2 | Complete    | 2026-02-23 |
 | 8. Orchestrator Spawning | 2/2 | Complete | 2026-02-23 |
-| 9. Result Handling | 0/TBD | Not started | - |
+| 9. Result Handling | 0/2 | Not started | - |
 | 10. Error Recovery & Cleanup | 0/TBD | Not started | - |

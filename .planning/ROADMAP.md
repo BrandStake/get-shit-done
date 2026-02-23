@@ -106,11 +106,11 @@ Plans:
   3. Orchestrator injects task context via files_to_read (content, not paths)
   4. Orchestrator falls back to gsd-executor when specialist=null or unavailable
   5. Specialists execute tasks with same context quality as gsd-executor
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD during planning
-- [ ] 08-02: TBD during planning
+- [ ] 08-01-PLAN.md — Specialist field parsing and spawning logic
+- [ ] 08-02-PLAN.md — Fallback mechanisms and integration
 
 ### Phase 9: Result Handling (Result Parsing & State Management)
 **Goal**: Orchestrator reliably parses specialist results and updates state
@@ -152,6 +152,6 @@ Phases execute in numeric order: 7 → 07.1 → 8 → 9 → 10
 |-------|----------------|--------|-----------|
 | 7. Infrastructure | 2/2 | Complete | 2026-02-23 |
 | 07.1. VoltAgent Verification Teams | 2/2 | Complete    | 2026-02-23 |
-| 8. Orchestrator Spawning | 0/TBD | Not started | - |
+| 8. Orchestrator Spawning | 0/2 | Not started | - |
 | 9. Result Handling | 0/TBD | Not started | - |
 | 10. Error Recovery & Cleanup | 0/TBD | Not started | - |

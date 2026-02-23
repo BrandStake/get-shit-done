@@ -8,11 +8,27 @@ A meta-prompting, context engineering, and spec-driven development system for Cl
 
 Give Claude everything it needs to do the work AND verify it - no manual context management, no quality degradation, no guessing.
 
-## Current State
+## Current Milestone: v1.22 Orchestrator-Mediated Specialist Delegation
 
-**Latest release:** v1.21 Hybrid Agent Team Execution (shipped 2026-02-23)
+**Goal:** Fix specialist delegation by having orchestrator spawn specialists based on planner assignments.
 
-**What shipped:**
+**Target features:**
+- Orchestrator generates available_agents.md dynamically for planner context
+- Planner assigns specialists to tasks in PLAN.md (specialist field)
+- Orchestrator reads PLAN.md and spawns appropriate specialists
+- Remove broken executor delegation code (can't call Task())
+- Specialists execute tasks, results flow back to orchestrator
+
+**Architecture:**
+```
+Planner (assigns) → PLAN.md → Orchestrator (spawns) → Specialist (executes) → Results
+```
+
+## Previous Release
+
+**v1.21 Hybrid Agent Team Execution** (shipped 2026-02-23)
+
+What shipped:
 - Domain detection with keyword-based pattern matching for 127+ VoltAgent specialists
 - Task and result adapter layers for GSD-to-specialist context translation
 - Co-authored commits with specialist attribution
@@ -20,11 +36,8 @@ Give Claude everything it needs to do the work AND verify it - no manual context
 - Single-writer state pattern enforcement
 - Comprehensive test suite (200+ tests) with mock specialists
 
-**Known limitation (discovered post-milestone):**
-- Specialist delegation architecture assumes gsd-executor has Task tool access
-- However, subagents spawned via Task() do NOT have Task tool access
-- This means delegation code in gsd-executor cannot actually delegate to specialists
-- Will be addressed in v1.22 with orchestrator-mediated delegation
+**Known limitation (fixed in v1.22):**
+- Executor delegation code assumed Task tool access, but subagents lack Task tool
 
 ## Requirements
 
@@ -48,7 +61,9 @@ Give Claude everything it needs to do the work AND verify it - no manual context
 
 ### Active
 
-(None — run `/gsd:new-milestone` to define next milestone requirements)
+- Orchestrator-mediated specialist delegation (v1.22)
+- Dynamic available_agents.md generation (v1.22)
+- Planner specialist assignment in PLAN.md (v1.22)
 
 ### Out of Scope
 
@@ -83,7 +98,8 @@ Give Claude everything it needs to do the work AND verify it - no manual context
 | Adapter pattern (task + result) | Clean separation, reusable, testable | ✓ Good |
 | Keyword matching for detection | Fast (<50ms), deterministic | ✓ Good |
 | Single-writer state pattern | Prevents coordination failures | ✓ Good |
-| Subagents lack Task tool | Discovered limitation, needs v1.22 fix | ⚠️ Revisit |
+| Planner assigns specialists | Routing decision at planning time, not execution | — Pending |
+| Orchestrator spawns specialists | Only orchestrator has Task tool access | — Pending |
 
 ---
-*Last updated: 2026-02-23 after v1.21 milestone completion*
+*Last updated: 2026-02-23 after v1.22 milestone start*

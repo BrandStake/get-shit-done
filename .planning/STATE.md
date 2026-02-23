@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Give Claude everything it needs to do the work AND verify it
-**Current focus:** Awaiting new milestone
+**Current focus:** Defining v1.22 requirements
 
 ## Current Position
 
-Phase: N/A
-Plan: N/A
-Status: AWAITING NEW MILESTONE
-Last activity: 2026-02-23 — v1.21 archived, ready for v1.22
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-23 — Milestone v1.22 started
 
-Progress: No active milestone
+Progress: No phases yet
 
 ## Accumulated Context
 
@@ -24,8 +24,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - Subagents lack Task tool access (discovered 2026-02-23) — Only orchestrators can spawn agents
-- Orchestrator-mediated delegation required — Subagents cannot call Task() themselves
-- Available agents list via context files — Pass agent list to subagents in .planning/ files
+- Planner assigns specialists to tasks — Routing decision at planning time, not execution
+- Orchestrator spawns specialists — Read PLAN.md, spawn appropriate specialist, pass results back
+- Available agents list via context files — Orchestrator generates available_agents.md for planner
 
 ### Blockers
 
@@ -38,5 +39,5 @@ See .planning/milestones/v1.21-ROADMAP.md for v1.21 metrics.
 ## Session Info
 
 Last session: 2026-02-23
-Stopped at: Archived v1.21 milestone
+Stopped at: Starting v1.22 milestone
 Resume file: None

@@ -134,6 +134,7 @@ const milestone = require('./lib/milestone.cjs');
 const commands = require('./lib/commands.cjs');
 const init = require('./lib/init.cjs');
 const frontmatter = require('./lib/frontmatter.cjs');
+const agents = require('./lib/agents.cjs');
 
 // ─── CLI Router ───────────────────────────────────────────────────────────────
 
@@ -542,6 +543,18 @@ async function main() {
         limit: limitIdx !== -1 ? parseInt(args[limitIdx + 1], 10) : 10,
         freshness: freshnessIdx !== -1 ? args[freshnessIdx + 1] : null,
       }, raw);
+      break;
+    }
+
+    case 'agents': {
+      const subcommand = args[1];
+      if (subcommand === 'enumerate') {
+        const outputIdx = args.indexOf('--output');
+        const outputPath = outputIdx !== -1 ? args[outputIdx + 1] : null;
+        agents.cmdEnumerateAgents(cwd, outputPath);
+      } else {
+        error('Unknown agents subcommand. Available: enumerate');
+      }
       break;
     }
 

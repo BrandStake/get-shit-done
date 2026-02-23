@@ -137,11 +137,11 @@ Plans:
   3. Orchestrator falls back to gsd-executor when specialist fails
   4. Orchestrator creates checkpoint before spawn for rollback on failure
   5. Broken Task() delegation code removed from gsd-executor.md
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: TBD during planning
-- [ ] 10-02: TBD during planning
+- [ ] 10-01-PLAN.md — Error recovery and robustness (timeout, checkpoint, rollback)
+- [ ] 10-02-PLAN.md — Cleanup and documentation (remove broken code, document architecture)
 
 ## Progress
 
@@ -154,4 +154,4 @@ Phases execute in numeric order: 7 → 07.1 → 8 → 9 → 10
 | 07.1. VoltAgent Verification Teams | 2/2 | Complete    | 2026-02-23 |
 | 8. Orchestrator Spawning | 2/2 | Complete | 2026-02-23 |
 | 9. Result Handling | 2/2 | Complete | 2026-02-23 |
-| 10. Error Recovery & Cleanup | 0/TBD | Not started | - |
+| 10. Error Recovery & Cleanup | 0/2 | Not started | - |

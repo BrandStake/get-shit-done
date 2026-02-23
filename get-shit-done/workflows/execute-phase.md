@@ -442,14 +442,18 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
       ${SPEC}: [${SPECIALIST_TASKS_MAP[$SPEC]}]"
    done
 
-   # Execute specialist
-   SPECIALIST_RESULT=$(Task(
-     subagent_type="${CURRENT_SPECIALIST}",
+   # Create checkpoint before specialist execution
+   CHECKPOINT_TAG=$(create_checkpoint "$PHASE_NUMBER" "$PLAN" "$CURRENT_SPECIALIST")
+   echo "Created checkpoint: $CHECKPOINT_TAG" >&2
+
+   # Execute specialist with timeout wrapper
+   SPECIALIST_RESULT=$(handle_specialist_timeout 'Task(
+     subagent_type="'"${CURRENT_SPECIALIST}"'",
      model="{executor_model}",
      prompt="
        <objective>
        Execute plan {plan_number} of phase {phase_number}-{phase_name}.
-       Specialist: ${CURRENT_SPECIALIST}
+       Specialist: '"${CURRENT_SPECIALIST}"'
        Commit each task atomically. Create SUMMARY.md. Update STATE.md and ROADMAP.md.
        </objective>
 
@@ -471,13 +475,13 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
 
        <specialist_metadata>
        Include this in SUMMARY.md frontmatter:
-       ${SPECIALIST_USAGE_YAML}
+       '"${SPECIALIST_USAGE_YAML}"'
        </specialist_metadata>
 
        <commit_attribution>
        When committing task work, include specialist co-authorship:
 
-       git commit -m \"\$(cat <<'EOF'
+       git commit -m \"\$(cat <<'"'"'EOF'"'"'
        feat(\${PHASE}-\${PLAN}): [task description]
 
        [Implementation details]
@@ -496,8 +500,8 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        </commit_attribution>
 
        <task_focus>
-       {If spawning for specific task: "Execute only task {TASK_NUM}, not the entire plan"}
-       {If spawning for entire plan: "Execute all tasks in the plan"}
+       {If spawning for specific task: \"Execute only task {TASK_NUM}, not the entire plan\"}
+       {If spawning for entire plan: \"Execute all tasks in the plan\"}
        </task_focus>
 
        <success_criteria>
@@ -505,10 +509,35 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        - [ ] Each task committed individually
        - [ ] SUMMARY.md created in plan directory
        - [ ] STATE.md updated with position and decisions
-       - [ ] ROADMAP.md updated with plan progress (via `roadmap update-plan-progress`)
+       - [ ] ROADMAP.md updated with plan progress (via \`roadmap update-plan-progress\`)
        </success_criteria>
      "
-   ))
+   )' "$PHASE_NUMBER" "$PLAN" 2>&1)
+   EXIT_CODE=$?
+
+   # Handle checkpoint based on exit code
+   if [ $EXIT_CODE -eq 0 ]; then
+     # Success - clean up checkpoint
+     git tag -d "$CHECKPOINT_TAG" 2>/dev/null
+     echo "Execution successful, checkpoint removed" >&2
+   elif [ $EXIT_CODE -eq 124 ] || [ $EXIT_CODE -eq 137 ]; then
+     # Timeout - check for salvageable work
+     if [ -n "$(git status --porcelain)" ]; then
+       echo "Timeout occurred, but files were modified. Keeping changes, removing checkpoint." >&2
+       git tag -d "$CHECKPOINT_TAG" 2>/dev/null
+     else
+       echo "Timeout with no salvageable work. Checkpoint available for review: $CHECKPOINT_TAG" >&2
+     fi
+   else
+     # Other failure - rollback to checkpoint
+     if [ -n "$(git status --porcelain)" ]; then
+       echo "Execution failed. Rolling back to checkpoint..." >&2
+       rollback_to_checkpoint "$CHECKPOINT_TAG"
+     else
+       echo "Execution failed but no files modified. Removing checkpoint." >&2
+       git tag -d "$CHECKPOINT_TAG" 2>/dev/null
+     fi
+   fi
 
    # Parse result to determine status
    TASK_STATUS=$(parse_specialist_result "$SPECIALIST_RESULT" "${TASK_NUM:-plan}" "$CURRENT_SPECIALIST" "$PHASE_DIR" "$PHASE_NUMBER" "$PLAN")
@@ -725,14 +754,18 @@ EOF
 Review with emphasis on: ${FOCUS_AREA}
 EOF
 
-       # Spawn the specialist
-       VERIFICATION_RESULT=$(Task(
-         subagent_type="${SPECIALIST}",
+       # Create checkpoint before verification specialist
+       VERIFY_CHECKPOINT=$(create_checkpoint "$PHASE_NUMBER" "$PLAN" "verify-${SPECIALIST}")
+       echo "Created verification checkpoint: $VERIFY_CHECKPOINT" >&2
+
+       # Spawn the specialist with timeout wrapper
+       VERIFICATION_RESULT=$(handle_specialist_timeout 'Task(
+         subagent_type="'"${SPECIALIST}"'",
          model="{verifier_model}",
          prompt="
            <objective>
            Review the implementation from plan {plan_id} of phase {phase_number}.
-           Verify ${FOCUS_AREA}.
+           Verify '"${FOCUS_AREA}"'.
            </objective>
 
            <files_to_read>
@@ -744,7 +777,7 @@ EOF
            </files_to_read>
 
            <verification_focus>
-           As ${SPECIALIST}, focus on: ${FOCUS_AREA}
+           As '"${SPECIALIST}"', focus on: '"${FOCUS_AREA}"'
            </verification_focus>
 
            Return structured result:
@@ -752,7 +785,16 @@ EOF
            - issues: list of problems found (if any)
            - suggestions: improvements (non-blocking)
          "
-       ))
+       )' "$PHASE_NUMBER" "$PLAN" 2>&1)
+       VERIFY_EXIT_CODE=$?
+
+       # Handle verification checkpoint
+       if [ $VERIFY_EXIT_CODE -eq 0 ]; then
+         git tag -d "$VERIFY_CHECKPOINT" 2>/dev/null
+       else
+         echo "Verification failed or timed out. Checkpoint: $VERIFY_CHECKPOINT" >&2
+         git tag -d "$VERIFY_CHECKPOINT" 2>/dev/null  # Clean up even on failure
+       fi
 
        # Parse result status (try structured format first, then fallback)
        VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)

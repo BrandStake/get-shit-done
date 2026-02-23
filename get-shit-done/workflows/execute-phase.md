@@ -339,12 +339,6 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    CURRENT_SPECIALIST="${SPECIALISTS[$TASK_NUM]:-gsd-executor}"
 
    echo "Spawning ${CURRENT_SPECIALIST} for plan {plan_id}..."
-
-   # Note: Spawn failure recovery
-   # After Task() call, check for classifyHandoffIfNeeded error
-   # This is a known Claude Code bug that doesn't indicate actual failure
-   # Spot-check actual outputs instead of relying on error message
-   # See failure_handling section for spot-check protocol
    ```
 
    **Spawn with validated specialist:**
@@ -352,8 +346,9 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    Pass paths only — executors read files themselves with their fresh 200k context.
    This keeps orchestrator context lean (~10-15%).
 
-   ```
-   Task(
+   ```bash
+   # Execute specialist
+   SPECIALIST_RESULT=$(Task(
      subagent_type="${CURRENT_SPECIALIST}",
      model="{executor_model}",
      prompt="
@@ -392,7 +387,22 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        - [ ] ROADMAP.md updated with plan progress (via `roadmap update-plan-progress`)
        </success_criteria>
      "
-   )
+   ))
+
+   # Parse result to determine status
+   TASK_STATUS=$(parse_specialist_result "$SPECIALIST_RESULT" "${TASK_NUM:-plan}" "$CURRENT_SPECIALIST" "$PHASE_DIR" "$PHASE_NUMBER" "$PLAN")
+
+   # Log outcome
+   echo "Plan {plan_id} executed by $CURRENT_SPECIALIST: $TASK_STATUS"
+
+   # Store raw output for debugging
+   echo "$SPECIALIST_RESULT" > "${PHASE_DIR}/${PHASE_NUMBER}-${PLAN}-RESULT.txt"
+
+   # Handle failure
+   if [ "$TASK_STATUS" = "FAILURE" ]; then
+     echo "Plan {plan_id} failed, checking fallback options..."
+     # Existing failure handling logic (see failure_handling section)
+   fi
    ```
 
    **Error handling:**
@@ -600,8 +610,19 @@ EOF
          "
        ))
 
-       # Parse result status
+       # Parse result status (try structured format first, then fallback)
        VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)
+
+       # If structured parsing failed, use multi-tier parser as fallback
+       if [ -z "$VERIFICATION_STATUS" ]; then
+         PARSED_STATUS=$(parse_specialist_result "$VERIFICATION_RESULT" "verification" "$SPECIALIST" "$PHASE_DIR" "$PHASE_NUMBER" "$PLAN")
+         if [ "$PARSED_STATUS" = "SUCCESS" ]; then
+           VERIFICATION_STATUS="PASS"
+         else
+           VERIFICATION_STATUS="FAIL"
+         fi
+       fi
+
        VERIFICATION_ISSUES=$(echo "$VERIFICATION_RESULT" | sed -n '/issues:/,/suggestions:/p' | grep "^- " | sed 's/^- //')
        VERIFICATION_SUGGESTIONS=$(echo "$VERIFICATION_RESULT" | sed -n '/suggestions:/,$p' | grep "^- " | sed 's/^- //')
 

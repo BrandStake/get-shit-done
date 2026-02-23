@@ -241,6 +241,80 @@ Record in `user_setup` frontmatter. Only include what Claude literally cannot do
 
 </task_breakdown>
 
+<specialist_assignment>
+
+## Assigning Specialists to Tasks
+
+**When to assign:** After breaking phase into tasks, before grouping into plans.
+
+**Process:**
+
+1. **Load available specialists:**
+   - Read .planning/available_agents.md (provided in files_to_read by orchestrator)
+   - Parse specialist names from markdown list format: `- **specialist-name**: description`
+   - Build roster array for validation
+
+2. **Detect task domain:**
+   - Apply keyword pattern matching to task action description
+   - Language specialists: Python (python, fastapi, django), TypeScript (typescript, tsx, react), Go (golang, go module)
+   - Infrastructure specialists: Kubernetes (kubernetes, k8s), Docker (docker, dockerfile)
+   - Frontend specialists: React (react, jsx), Vue (vue.js, vuex)
+   - Backend specialists: API (rest api, graphql), Database (postgres, mysql, mongodb)
+   - Priority ordering: specific frameworks > generic languages > file extensions
+
+3. **Validate specialist availability:**
+   - If domain detected, check if matching specialist in roster
+   - If specialist exists in available_agents.md, assign to task
+   - If specialist NOT in roster, assign null (specialist unavailable or not installed)
+
+4. **Assign to task frontmatter:**
+   - Add specialist field to tasks array in PLAN.md frontmatter
+   - Format: `specialist: python-pro` or `specialist: null`
+   - Null-safe: specialist=null means direct gsd-executor execution
+
+**Domain detection patterns (REUSE from v1.21):**
+
+| Domain | Keywords | Specialist |
+|--------|----------|------------|
+| Python | python, fastapi, django, flask, pytest | python-pro |
+| TypeScript | typescript, tsx, react, next.js | typescript-pro |
+| Go | golang, go module, go.mod | golang-pro |
+| Kubernetes | kubernetes, k8s, kubectl, helm | kubernetes-specialist |
+| Docker | docker, dockerfile, container | docker-expert |
+| React | react, jsx, component, hooks | react-specialist |
+| API | rest api, graphql, endpoint | api-specialist |
+
+**Fallback behavior:**
+- Task with no domain match → specialist: null (direct execution)
+- Task domain detected but specialist unavailable → specialist: null + warning in plan
+- Checkpoint tasks → ALWAYS specialist: null (require GSD protocol knowledge)
+
+**Example PLAN.md frontmatter:**
+
+```yaml
+---
+phase: XX-name
+plan: NN
+type: execute
+wave: 1
+depends_on: []
+files_modified: [src/api/users.py]
+autonomous: true
+requirements: [REQ-01]
+must_haves:
+  truths: []
+  artifacts: []
+  key_links: []
+tasks:
+  - specialist: python-pro  # FastAPI task, python-pro available
+    name: Create FastAPI user endpoint
+  - specialist: null  # Config task, no specialist match
+    name: Update environment variables
+---
+```
+
+</specialist_assignment>
+
 <dependency_graph>
 
 ## Building the Dependency Graph
@@ -1036,6 +1110,12 @@ Use template structure for each PLAN.md.
 Write to `.planning/phases/XX-name/{phase}-{NN}-PLAN.md`
 
 Include all frontmatter fields.
+
+**Specialist field writing:**
+- After determining task breakdown, apply specialist assignment logic
+- Validate specialist against available_agents.md roster
+- Write tasks array in frontmatter with specialist field for each task
+- Document specialist assignment rationale in plan if non-obvious
 </step>
 
 <step name="validate_plan">
@@ -1064,6 +1144,11 @@ Returns JSON: `{ valid, errors, warnings, task_count, tasks }`
 - Missing `<name>` in task → add name element
 - Missing `<action>` → add action element
 - Checkpoint/autonomous mismatch → update `autonomous: false`
+
+**Specialist validation:**
+- Check specialist field exists in all tasks frontmatter
+- Warn if specialist assigned but not in available_agents.md
+- Accept specialist: null as valid value (direct execution fallback)
 </step>
 
 <step name="update_roadmap">

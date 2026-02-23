@@ -9,10 +9,10 @@ Requirements for orchestrator-mediated specialist delegation. Each maps to roadm
 
 ### Agent Discovery
 
-- [ ] **DISC-01**: gsd-tools generates available_agents.md from ~/.claude/agents/
-- [ ] **DISC-02**: available_agents.md includes agent name, type, and description
-- [ ] **DISC-03**: Orchestrator validates agent exists before spawning (fresh check)
-- [ ] **DISC-04**: Filter excludes GSD system agents (gsd-executor, gsd-planner, etc.)
+- [x] **DISC-01**: gsd-tools generates available_agents.md from ~/.claude/agents/
+- [x] **DISC-02**: available_agents.md includes agent name, type, and description
+- [x] **DISC-03**: Orchestrator validates agent exists before spawning (fresh check)
+- [x] **DISC-04**: Filter excludes GSD system agents (gsd-executor, gsd-planner, etc.)
 
 ### Planning Integration
 
@@ -81,10 +81,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DISC-01 | Phase 7 | Pending |
-| DISC-02 | Phase 7 | Pending |
-| DISC-03 | Phase 7 | Pending |
-| DISC-04 | Phase 7 | Pending |
+| DISC-01 | Phase 7 | Complete |
+| DISC-02 | Phase 7 | Complete |
+| DISC-03 | Phase 7 | Complete |
+| DISC-04 | Phase 7 | Complete |
 | PLAN-01 | Phase 7 | Pending |
 | PLAN-02 | Phase 7 | Pending |
 | PLAN-03 | Phase 7 | Pending |

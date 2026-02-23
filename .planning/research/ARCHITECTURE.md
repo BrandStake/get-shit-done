@@ -1,891 +1,960 @@
-# Architecture: VoltAgent Adapter Integration
+# Architecture Research: Orchestrator-Mediated Specialist Delegation
 
-**Domain:** Hybrid agent team execution for GSD
+**Domain:** Multi-agent orchestration with specialist delegation for GSD v1.22
 **Researched:** 2026-02-22
 **Confidence:** HIGH
 
-## Executive Summary
+## Integration Architecture
 
-The VoltAgent adapter integration extends GSD's existing Task-based orchestration pattern without replacing it. Adapters are **inline functions within gsd-executor**, not separate agent files. This keeps the architecture lean while enabling specialist delegation when VoltAgent plugins are available.
-
-**Key insight:** GSD already has robust subagent spawning infrastructure via the Task tool. The adapters translate between GSD's task format and specialist prompts, then route back to the existing Task tool for execution.
-
-## Recommended Architecture
+### Current System (v1.21 - Broken Delegation)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ execute-phase orchestrator (UNCHANGED)                       │
-│ - Discovers plans                                            │
-│ - Groups into waves                                          │
-│ - Spawns gsd-executor per plan via Task()                   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ gsd-executor (MODIFIED - adds adapter logic)                 │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ 1. Load PLAN.md                                         │ │
-│ │ 2. For each task:                                       │ │
-│ │    ┌──────────────────────────────────────────────┐    │ │
-│ │    │ NEW: Domain Detection                        │    │ │
-│ │    │ - Check task description/type/tags           │    │ │
-│ │    │ - Check VoltAgent availability               │    │ │
-│ │    │ - Decide: delegate vs execute directly       │    │ │
-│ │    └──────────────┬───────────────────────────────┘    │ │
-│ │                   │                                     │ │
-│ │    ┌──────────────▼────────────────┐                   │ │
-│ │    │ Route A: Delegate             │  Route B: Direct  │ │
-│ │    └──────────────┬────────────────┘                   │ │
-│ └───────────────────┼──────────────────────────────────┬─┘ │
-│                     │                                  │   │
-│    ┌────────────────▼────────────────┐                 │   │
-│    │ NEW: gsd-task-adapter()         │                 │   │
-│    │ - Extract task context          │                 │   │
-│    │ - Build specialist prompt       │                 │   │
-│    │ - Include GSD constraints       │                 │   │
-│    └────────────────┬────────────────┘                 │   │
-│                     │                                  │   │
-│                     ▼                                  │   │
-│    ┌─────────────────────────────────────┐            │   │
-│    │ Task(                               │            │   │
-│    │   subagent_type="python-pro",      │            │   │
-│    │   prompt=adapted_prompt,           │            │   │
-│    │   model=executor_model             │            │   │
-│    │ )                                  │            │   │
-│    └────────────────┬────────────────────┘            │   │
-│                     │                                 │   │
-│                     ▼                                 │   │
-│    ┌────────────────────────────────────┐            │   │
-│    │ VoltAgent Specialist               │            │   │
-│    │ - Fresh context window             │            │   │
-│    │ - Domain expertise                 │            │   │
-│    │ - Returns raw output               │            │   │
-│    └────────────────┬────────────────────┘            │   │
-│                     │                                 │   │
-│                     ▼                                 │   │
-│    ┌────────────────────────────────────┐            │   │
-│    │ NEW: gsd-result-adapter()          │            │   │
-│    │ - Parse specialist output          │            │   │
-│    │ - Extract files modified           │            │   │
-│    │ - Format as task completion        │            │   │
-│    │ - Return to gsd-executor           │            │   │
-│    └────────────────┬────────────────────┘            │   │
-│                     │                                 │   │
-│ ┌───────────────────▼─────────────────────────────────▼─┐ │
-│ │ 3. EXISTING: Commit task (gsd-executor continues)     │ │
-│ │ 4. EXISTING: Update tracking                          │ │
-│ │ 5. EXISTING: Create SUMMARY.md                        │ │
-│ │ 6. EXISTING: Update STATE.md, ROADMAP.md              │ │
-│ └───────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    ORCHESTRATOR (Main Claude)                 │
+│                    - Runs slash commands                      │
+│                    - Has Task() tool access                   │
+│                    - Spawns subagents                         │
+├──────────────────────────────────────────────────────────────┤
+│  ┌────────────┐  ┌──────────────┐  ┌───────────────┐        │
+│  │ Workflow   │  │  Workflow    │  │   Workflow    │        │
+│  │ plan-phase │  │execute-phase │  │ verify-phase  │        │
+│  └──────┬─────┘  └──────┬───────┘  └───────┬───────┘        │
+│         │                │                  │                │
+│         ↓                ↓                  ↓                │
+│  ┌────────────┐  ┌──────────────┐  ┌───────────────┐        │
+│  │ gsd-       │  │ gsd-executor │  │ gsd-verifier  │        │
+│  │ planner    │  │              │  │               │        │
+│  └────────────┘  └──────┬───────┘  └───────────────┘        │
+│                         │                                     │
+│                         │ BROKEN: Tries to spawn             │
+│                         │ specialists via Task()             │
+│                         │ But NO Task tool access!           │
+│                         ↓                                     │
+│                  ❌ VoltAgent Specialist (fails)              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Component Boundaries
+**The Problem (v1.21):**
+- gsd-executor tried to call `Task(subagent_type="python-pro", ...)`
+- **Subagents DON'T have Task tool access** (only orchestrator does)
+- Result: delegation fails at runtime
 
-| Component | Responsibility | Lives Where | Communicates With |
-|-----------|---------------|-------------|-------------------|
-| **execute-phase orchestrator** | Wave coordination, spawn executors per plan | `get-shit-done/workflows/execute-phase.md` | gsd-executor (unchanged) |
-| **gsd-executor** | Task execution, deviation rules, commits, state management | `agents/gsd-executor.md` | Domain detector, adapters, Task tool |
-| **Domain Detector** | Analyze task, decide delegate vs direct | NEW: inline logic in gsd-executor | gsd-executor |
-| **gsd-task-adapter()** | Translate GSD task → specialist prompt | NEW: function in gsd-executor | Domain detector, Task tool |
-| **VoltAgent Specialist** | Execute task with domain expertise | External: `~/.claude/agents/` | Task tool, gsd-result-adapter |
-| **gsd-result-adapter()** | Parse specialist output → GSD format | NEW: function in gsd-executor | VoltAgent specialist, gsd-executor |
-| **Task tool** | Spawn subagent with fresh context | Claude Code runtime | Orchestrator, adapters, specialists |
+### Target System (v1.22 - Orchestrator-Mediated)
 
-### Key Architectural Decisions
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                     ORCHESTRATOR (Main Claude)                     │
+│                     - ONLY entity with Task() tool                 │
+│                     - Runs slash commands (/gsd:*)                │
+│                     - Spawns ALL subagents (gsd + specialists)    │
+├───────────────────────────────────────────────────────────────────┤
+│  ┌────────────────┐  ┌──────────────────┐  ┌─────────────┐       │
+│  │ plan-phase.md  │  │ execute-phase.md │  │verify-phase │       │
+│  └────────┬───────┘  └─────────┬────────┘  └──────┬──────┘       │
+│           │                    │                   │              │
+│           ↓                    │                   ↓              │
+│    ┌────────────┐              │            ┌─────────────┐      │
+│    │ Generate   │              │            │ gsd-verifier│      │
+│    │ available_ │              │            └─────────────┘      │
+│    │ agents.md  │              │                                 │
+│    └──────┬─────┘              │                                 │
+│           │                    │                                 │
+│           ↓                    │                                 │
+│    ┌────────────┐              │                                 │
+│    │ gsd-       │              │                                 │
+│    │ planner    │              │                                 │
+│    │            │              │                                 │
+│    │ Reads      │              │                                 │
+│    │ available_ │              │                                 │
+│    │ agents.md  │              │                                 │
+│    │            │              │                                 │
+│    │ Assigns    │              │                                 │
+│    │ specialist │              │                                 │
+│    │ field ──┐  │              │                                 │
+│    └─────────┼──┘              │                                 │
+│              │                 │                                 │
+│              ↓                 │                                 │
+│        PLAN.md with            │                                 │
+│        specialist: python-pro  │                                 │
+│              │                 │                                 │
+│              └─────────────────┤                                 │
+│                                │                                 │
+│                                ↓                                 │
+│                      ┌────────────────────┐                      │
+│                      │ FOR EACH TASK:     │                      │
+│                      │ Read specialist    │                      │
+│                      │ field from PLAN.md │                      │
+│                      └─────────┬──────────┘                      │
+│                                │                                 │
+│                        ┌───────┴────────┐                        │
+│                        │                │                        │
+│                   specialist          No specialist              │
+│                   assigned            (direct)                   │
+│                        │                │                        │
+│                        ↓                ↓                        │
+│              Task(subagent_type=  Task(subagent_type=           │
+│              "python-pro", ...)   "gsd-executor", ...)          │
+│                        │                │                        │
+├────────────────────────┼────────────────┼─────────────────────────┤
+│                 EXECUTION LAYER         │                        │
+├────────────────────────┼────────────────┼─────────────────────────┤
+│  ┌─────────────────────┴──┐  ┌──────────┴──────────────────┐    │
+│  │  VoltAgent Specialist  │  │  gsd-executor (direct)      │    │
+│  │  (python-pro, etc)     │  │                             │    │
+│  │                        │  │  - Manages STATE.md         │    │
+│  │  - Executes task       │  │  - Commits                  │    │
+│  │  - Returns result      │  │  - Checkpoints              │    │
+│  │  - NO Task access      │  │  - Deviations               │    │
+│  │  - NO state writes     │  │                             │    │
+│  └────────────┬───────────┘  └──────────┬──────────────────┘    │
+│               │                         │                        │
+│               └─────────────┬───────────┘                        │
+│                             │                                    │
+│                      Results flow back                           │
+│                      to orchestrator                             │
+│                             │                                    │
+│                             ↓                                    │
+│               Orchestrator updates STATE.md                      │
+│               via gsd-tools (single-writer)                      │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-**1. Adapters are functions, not agents**
+## Component Responsibilities
 
-- **Why:** Keeps gsd-executor self-contained, no extra agent files to maintain
-- **How:** Add `<adapter_functions>` section to gsd-executor.md with JavaScript-style pseudocode
-- **Tradeoff:** Adds ~200 lines to gsd-executor but eliminates coordination complexity
-
-**2. Detection happens per-task, not per-plan**
-
-- **Why:** Plans mix task types (auth setup + Python migration + database schema)
-- **Where:** New `<domain_detection>` step in gsd-executor's `<execute_tasks>` flow
-- **Granularity:** Each task independently evaluated for delegation
-
-**3. VoltAgent specialists invoked via existing Task tool**
-
-- **Why:** GSD already spawns gsd-executor, gsd-verifier, gsd-planner via Task()
-- **Pattern:** `Task(subagent_type="python-pro", prompt=adapted_prompt, model=executor_model)`
-- **Benefit:** Zero changes to Claude Code integration, uses proven orchestration
-
-**4. Graceful fallback is implicit**
-
-- **Detection:** `ls ~/.claude/agents/python-pro.md 2>/dev/null` returns empty → specialist unavailable
-- **Fallback:** Domain detector returns `route: "direct"` → gsd-executor handles task normally
-- **No special mode:** Availability check is part of detection logic
-
-**5. GSD state management stays in gsd-executor**
-
-- **Why:** Specialists don't understand PLAN.md, STATE.md, deviation rules, checkpoints
-- **How:** Adapters provide context, specialists execute, gsd-executor commits/updates state
-- **Preserved:** Atomic commits, deviation tracking, checkpoint protocol, SUMMARY creation
+| Component | Responsibility | Location | New/Modified |
+|-----------|----------------|----------|--------------|
+| **Orchestrator** | Spawns ALL subagents via Task() | Workflows (*.md) | Modified |
+| **available_agents.md generator** | Create specialist registry for planner | plan-phase.md | **NEW** |
+| **gsd-planner** | Assign specialist field to tasks | agents/gsd-planner.md | Modified |
+| **execute-phase workflow** | Read specialist field, spawn appropriately | workflows/execute-phase.md | Modified |
+| **VoltAgent Specialists** | Execute tasks with domain expertise | ~/.claude/agents/*.md | External |
+| **gsd-executor** | Direct execution, STATE.md management | agents/gsd-executor.md | Unchanged (v1.22) |
+| **STATE.md writer** | Single-writer pattern via gsd-tools | gsd-tools.cjs | Unchanged |
 
 ## Data Flow
 
-### Flow 1: Specialist Delegation (Happy Path)
+### Flow 1: Planning with Specialist Assignment
 
 ```
-1. gsd-executor loads PLAN.md
-   → Task 3: "Migrate user authentication to Python FastAPI"
-
-2. Domain detection analyzes task:
-   → Keywords: ["Python", "FastAPI", "authentication"]
-   → Check: ~/.claude/agents/python-pro.md exists
-   → Decision: DELEGATE to python-pro
-
-3. gsd-task-adapter() builds prompt:
-   Input:
-   - Task description from PLAN.md
-   - Project context (CLAUDE.md, .agents/skills/)
-   - GSD constraints (must verify, must commit format)
-   - Current state (what's been built so far)
-
-   Output:
-   - Specialist-friendly prompt
-   - Includes verification criteria
-   - Specifies files to read
-   - NO GSD-specific formatting
-
-4. Task() spawns specialist:
-   → subagent_type="python-pro"
-   → Fresh 200k context window
-   → Specialist executes with domain expertise
-   → Returns output (code, files modified, verification results)
-
-5. gsd-result-adapter() parses output:
-   Input:
-   - Raw specialist output
-   - Expected task completion format
-
-   Output:
-   - files_modified: ["src/api/auth.py", "requirements.txt"]
-   - verification_passed: true
-   - deviations: ["Added CORS middleware (security)"]
-   - commit_message: "feat(03-02): migrate auth to FastAPI"
-
-6. gsd-executor continues normally:
-   → Commits with extracted message
-   → Tracks deviation
-   → Updates STATE.md
-   → Creates SUMMARY.md after all tasks
+User: /gsd:plan-phase X
+    ↓
+Orchestrator (plan-phase.md)
+    ↓
+1. Generate available_agents.md
+   ┌────────────────────────────────────────┐
+   │ Scan ~/.claude/agents/*.md             │
+   │ Check npm global voltagent-*           │
+   │ Write to .planning/available_agents.md │
+   └────────────────────┬───────────────────┘
+                        ↓
+2. Spawn gsd-planner via Task()
+   ┌────────────────────────────────────────┐
+   │ Task(                                  │
+   │   subagent_type="general-purpose",     │
+   │   prompt="Read ~/.claude/agents/       │
+   │           gsd-planner.md               │
+   │           <files_to_read>              │
+   │           - ROADMAP.md                 │
+   │           - STATE.md                   │
+   │           - available_agents.md ← NEW  │
+   │           </files_to_read>"            │
+   │ )                                      │
+   └────────────────────┬───────────────────┘
+                        ↓
+gsd-planner executes:
+   ┌────────────────────────────────────────┐
+   │ 1. Read available_agents.md            │
+   │ 2. For each task:                      │
+   │    - Detect domain (keyword match)     │
+   │    - Check if specialist available     │
+   │    - Evaluate complexity (>3 files?)   │
+   │    ┌─────────────────────────────┐    │
+   │    │ If domain + available +      │    │
+   │    │ complex enough:              │    │
+   │    │   specialist: python-pro     │    │
+   │    └─────────────────────────────┘    │
+   │ 3. Write PLAN.md with specialist field │
+   └────────────────────┬───────────────────┘
+                        ↓
+PLAN.md created:
+<task type="auto" specialist="python-pro">
+  <name>Implement FastAPI authentication</name>
+  <files>src/api/auth.py</files>
+  <action>Create POST /auth/login...</action>
+  <verify>pytest tests/test_auth.py</verify>
+  <done>Login returns JWT</done>
+</task>
+                        ↓
+Return to orchestrator:
+## PLANNING COMPLETE
 ```
 
-### Flow 2: Direct Execution (Fallback)
+### Flow 2: Execution with Orchestrator-Mediated Delegation
 
 ```
-1. gsd-executor loads PLAN.md
-   → Task 1: "Update documentation for authentication flow"
-
-2. Domain detection analyzes task:
-   → Keywords: ["documentation"]
-   → No specialist match (docs are general-purpose)
-   → Decision: DIRECT
-
-3. gsd-executor handles task normally:
-   → EXISTING execution flow
-   → Deviation rules apply
-   → Commit as usual
-   → No adapter involvement
+User: /gsd:execute-phase X
+    ↓
+Orchestrator (execute-phase.md)
+    ↓
+1. Read PLAN.md files for phase
+    ↓
+2. Group into waves (unchanged)
+    ↓
+3. For each plan in wave:
+   ┌────────────────────────────────────────┐
+   │ Parse ALL tasks in PLAN.md             │
+   │                                        │
+   │ For each task:                         │
+   │   1. Extract specialist field from XML │
+   │   2. Route based on field:             │
+   │                                        │
+   │   If specialist assigned:              │
+   │   ┌──────────────────────────────────┐ │
+   │   │ Task(                            │ │
+   │   │   subagent_type="python-pro",    │ │
+   │   │   model=executor_model,          │ │
+   │   │   prompt="                       │ │
+   │   │     <task_context>               │ │
+   │   │     [Task details from PLAN.md]  │ │
+   │   │     </task_context>              │ │
+   │   │     <files_to_read>              │ │
+   │   │     - CLAUDE.md                  │ │
+   │   │     - .agents/skills/            │ │
+   │   │     - [task files]               │ │
+   │   │     </files_to_read>             │ │
+   │   │     <gsd_rules>                  │ │
+   │   │     - Commit format              │ │
+   │   │     - Deviation rules            │ │
+   │   │     - Output format              │ │
+   │   │     </gsd_rules>                 │ │
+   │   │   ",                             │ │
+   │   │   description="Task 03-02-1"     │ │
+   │   │ )                                │ │
+   │   └──────────────┬───────────────────┘ │
+   │                  │                     │
+   │                  ↓                     │
+   │         python-pro executes            │
+   │                  │                     │
+   │                  ↓                     │
+   │         Returns result:                │
+   │         {                              │
+   │           files_modified: [...],       │
+   │           verification_status: "...",  │
+   │           commit_message: "...",       │
+   │           deviations: [...]            │
+   │         }                              │
+   │                  │                     │
+   │   If NO specialist:                    │
+   │   ┌──────────────────────────────────┐ │
+   │   │ Task(                            │ │
+   │   │   subagent_type="gsd-executor",  │ │
+   │   │   model=executor_model,          │ │
+   │   │   prompt="@gsd-executor.md       │ │
+   │   │           <files_to_read>        │ │
+   │   │           - PLAN.md              │ │
+   │   │           - STATE.md             │ │
+   │   │           </files_to_read>"      │ │
+   │   │ )                                │ │
+   │   └──────────────┬───────────────────┘ │
+   │                  │                     │
+   │                  ↓                     │
+   │        gsd-executor executes           │
+   │        (traditional flow)              │
+   │                  │                     │
+   │                  ↓                     │
+   │        Returns via SUMMARY.md          │
+   └──────────────────┬─────────────────────┘
+                      ↓
+4. Orchestrator receives results
+   ┌────────────────────────────────────────┐
+   │ Parse specialist/executor output       │
+   │ Update STATE.md via gsd-tools:         │
+   │   - state advance-plan                 │
+   │   - state update-progress              │
+   │   - state record-metric                │
+   │ Update ROADMAP.md progress             │
+   │ Update REQUIREMENTS.md checkboxes      │
+   └────────────────────┬───────────────────┘
+                        ↓
+5. Next task or complete
 ```
 
-### Flow 3: Specialist Unavailable (Graceful Fallback)
+## Integration Points
 
+### Point 1: available_agents.md Generation (NEW)
+
+**Location:** plan-phase.md workflow (before spawning gsd-planner)
+
+**Implementation:**
+```bash
+# In plan-phase.md Step 5.5 (after research, before planner spawn)
+generate_available_agents() {
+  local output_file=".planning/available_agents.md"
+
+  echo "# Available Specialists" > "$output_file"
+  echo "" >> "$output_file"
+  echo "VoltAgent specialists installed and available for delegation:" >> "$output_file"
+  echo "" >> "$output_file"
+
+  # Scan ~/.claude/agents/
+  if [ -d "$HOME/.claude/agents" ]; then
+    for agent_file in "$HOME/.claude/agents"/*.md; do
+      if [[ -f "$agent_file" ]]; then
+        agent_name=$(basename "$agent_file" .md)
+        # Filter for VoltAgent specialists (exclude gsd-* agents)
+        if [[ "$agent_name" =~ (pro|specialist|expert|engineer|architect|tester)$ ]] && \
+           [[ ! "$agent_name" =~ ^gsd- ]]; then
+          echo "- $agent_name" >> "$output_file"
+        fi
+      fi
+    done
+  fi
+
+  # Optionally check npm global for voltagent-* packages
+  if command -v npm >/dev/null 2>&1; then
+    npm list -g --depth=0 2>/dev/null | grep 'voltagent-' | \
+      sed 's/.*voltagent-\([^ @]*\).*/- \1/' >> "$output_file"
+  fi
+}
+
+generate_available_agents
 ```
-1. Domain detection analyzes task:
-   → Keywords: ["Terraform", "infrastructure"]
-   → Check: ~/.claude/agents/terraform-engineer.md
-   → Result: File not found (plugin not installed)
-   → Decision: DIRECT (fallback)
 
-2. gsd-executor handles task normally:
-   → Executes with generalist capability
-   → Logs: "Note: terraform-engineer specialist unavailable, executing directly"
-   → SUMMARY.md includes note in metadata
+**Output format (.planning/available_agents.md):**
+```markdown
+# Available Specialists
+
+VoltAgent specialists installed and available for delegation:
+
+- python-pro
+- typescript-pro
+- postgres-pro
+- kubernetes-specialist
+- docker-expert
+- terraform-engineer
+- aws-architect
+- security-engineer
 ```
 
-## Integration Points with Existing GSD
+### Point 2: Planner Specialist Assignment (MODIFIED)
 
-### 1. execute-phase orchestrator (NO CHANGES)
+**Location:** agents/gsd-planner.md
 
-**Location:** `get-shit-done/workflows/execute-phase.md`
+**Changes:**
+1. Add available_agents.md to files_to_read
+2. Add domain detection logic to task creation
+3. Add specialist field to task XML when applicable
 
-**Current behavior:**
-```
-Task(
-  subagent_type="gsd-executor",
-  model="{executor_model}",
-  prompt="<objective>Execute plan {plan_number}...</objective>
-  <files_to_read>
-  - {phase_dir}/{plan_file}
-  - .planning/STATE.md
-  - ./CLAUDE.md
-  </files_to_read>"
-)
-```
-
-**Integration:** NONE. Orchestrator continues spawning gsd-executor as before. Delegation happens internally within gsd-executor.
-
-### 2. gsd-executor (MODIFICATIONS)
-
-**Location:** `agents/gsd-executor.md`
-
-**New sections to add:**
-
+**Implementation (in gsd-planner.md <task_breakdown>):**
 ```xml
-<domain_detection>
-For each task in PLAN.md, analyze domain and decide routing:
+<!-- NEW section in gsd-planner.md -->
+<specialist_assignment>
 
-1. Extract domain signals:
-   - Task description keywords
-   - Task type/tags (if present)
-   - Technology stack references
-   - Implementation patterns
+## Specialist Assignment
 
-2. Check VoltAgent specialist availability:
+For each task, determine if specialist delegation is beneficial:
+
+1. **Read available_agents.md**
+   - Load list of installed specialists
+   - If file missing, skip specialist assignment
+
+2. **Detect domain** (keyword matching):
    ```bash
-   SPECIALIST=$(detect_specialist_for_task "$TASK_DESC")
-   if [ -f ~/.claude/agents/${SPECIALIST}.md ]; then
-     AVAILABLE=true
-   else
-     AVAILABLE=false
-   fi
+   detect_specialist() {
+     local desc="$1"
+
+     # Language specialists
+     if echo "$desc" | grep -iE "python|fastapi|django|flask|pytest" >/dev/null; then
+       echo "python-pro"
+     elif echo "$desc" | grep -iE "typescript|react|next\.js|tsx" >/dev/null; then
+       echo "typescript-pro"
+     elif echo "$desc" | grep -iE "golang|go " >/dev/null; then
+       echo "golang-pro"
+
+     # Infrastructure specialists
+     elif echo "$desc" | grep -iE "kubernetes|k8s|helm" >/dev/null; then
+       echo "kubernetes-specialist"
+     elif echo "$desc" | grep -iE "docker|container" >/dev/null; then
+       echo "docker-expert"
+     elif echo "$desc" | grep -iE "terraform|\.tf" >/dev/null; then
+       echo "terraform-engineer"
+
+     # Data specialists
+     elif echo "$desc" | grep -iE "postgres|postgresql|sql" >/dev/null; then
+       echo "postgres-pro"
+     elif echo "$desc" | grep -iE "security|auth|cors|csrf" >/dev/null; then
+       echo "security-engineer"
+
+     else
+       echo ""  # No specialist match
+     fi
+   }
    ```
 
-3. Routing decision:
-   | Condition | Route | Rationale |
-   |-----------|-------|-----------|
-   | High-value domain match + specialist available | DELEGATE | Domain expertise improves quality |
-   | General-purpose task | DIRECT | No specialist benefit |
-   | Specialist unavailable | DIRECT | Graceful fallback |
-   | Checkpoint task | DIRECT | Requires GSD checkpoint protocol |
+3. **Check availability**:
+   - Verify specialist is in available_agents.md list
+   - If detected but unavailable, do NOT assign (orchestrator will execute directly)
 
-4. Domain mapping (examples):
-   | Keywords | Specialist | Value Proposition |
-   |----------|-----------|-------------------|
-   | Python, FastAPI, Django, Flask | python-pro | Framework expertise, testing patterns |
-   | TypeScript, React, Next.js | typescript-pro | Type safety, component patterns |
-   | PostgreSQL, database schema | postgres-pro | Query optimization, schema design |
-   | Kubernetes, deployment | kubernetes-specialist | Manifest patterns, scaling |
-   | Security, auth, CORS | security-engineer | Vulnerability detection |
+4. **Evaluate complexity**:
+   - File count: >3 files modified → delegate
+   - Line count estimate: >50 lines → delegate
+   - Simple tasks (docs, config) → do NOT delegate
 
-</domain_detection>
+5. **Assign specialist field**:
+   ```xml
+   <!-- If specialist appropriate and available -->
+   <task type="auto" specialist="python-pro">
+     ...
+   </task>
 
-<adapter_functions>
+   <!-- If no specialist or unavailable -->
+   <task type="auto">
+     ...
+   </task>
+   ```
 
-## gsd-task-adapter()
-
-Translate GSD task context → specialist-friendly prompt.
-
-**Input:**
-- task_number: Current task number
-- task_description: From PLAN.md <task> element
-- task_type: auto/checkpoint/tdd
-- plan_context: PLAN.md objective and context sections
-- project_context: CLAUDE.md, .agents/skills/ references
-- state_context: What's been built (from previous tasks)
-- verification_criteria: From task <verification> or <done>
-- specialist: Target specialist name (e.g., "python-pro")
-
-**Output:** String prompt for Task() call
-
-**Example:**
-```javascript
-function gsd_task_adapter(input) {
-  return `
-<objective>
-${input.task_description}
-
-This is task ${input.task_number} in a multi-task plan for: ${input.plan_context.objective}
-</objective>
-
-<project_context>
-Read these files for project-specific guidelines:
-- ./CLAUDE.md (coding conventions, security requirements)
-- .agents/skills/ (project patterns and best practices)
-${input.project_context.files.map(f => `- ${f}`).join('\n')}
-</project_context>
-
-<built_so_far>
-${input.state_context.completed_tasks.map(t => `- Task ${t.num}: ${t.summary}`).join('\n')}
-
-Key files from previous tasks:
-${input.state_context.files_created.join('\n')}
-</built_so_far>
-
-<verification>
-Task is complete when:
-${input.verification_criteria.map(c => `- ${c}`).join('\n')}
-</verification>
-
-<output_format>
-Return:
-1. Implementation summary (2-3 sentences)
-2. Files modified (list with paths)
-3. Verification results (did criteria pass?)
-4. Any deviations from requirements (bugs fixed, missing functionality added)
-5. Suggested commit message
-</output_format>
-
-<constraints>
-- Follow project conventions in CLAUDE.md
-- Apply relevant patterns from .agents/skills/
-- Test your changes before reporting complete
-- Report actual verification results (don't assume pass)
-</constraints>
-`;
-}
+</specialist_assignment>
 ```
 
-## gsd-result-adapter()
+### Point 3: Orchestrator Specialist Spawning (MODIFIED)
 
-Parse specialist output → GSD task completion format.
+**Location:** workflows/execute-phase.md
 
-**Input:**
-- specialist_output: Raw output from Task() call
-- task_number: For tracking
-- expected_files: From task specification
+**Changes:** Add specialist field parsing and routing logic
 
-**Output:** Structured object
-
-```javascript
-function gsd_result_adapter(specialist_output, task_number, expected_files) {
-  // Parse output for GSD-required fields
-  const parsed = {
-    task_number: task_number,
-    files_modified: extract_files(specialist_output),
-    verification_passed: check_verification(specialist_output),
-    deviations: extract_deviations(specialist_output),
-    commit_message: extract_commit_message(specialist_output),
-    summary: extract_summary(specialist_output),
-    issues: extract_issues(specialist_output)
-  };
-
-  // Validate required fields present
-  if (!parsed.files_modified.length) {
-    // Specialist didn't report files - scan git status
-    parsed.files_modified = scan_git_modified();
-  }
-
-  if (!parsed.commit_message) {
-    // Generate default from task
-    parsed.commit_message = `feat(${PHASE}-${PLAN}): complete task ${task_number}`;
-  }
-
-  return parsed;
-}
-
-function extract_files(output) {
-  // Parse "Files modified:" section or similar
-  // Return array of file paths
-}
-
-function check_verification(output) {
-  // Look for verification results
-  // Return true/false based on criteria met
-}
-
-function extract_deviations(output) {
-  // Find auto-fixes, added features, blocking issues
-  // Return array of deviation descriptions
-}
-
-function extract_commit_message(output) {
-  // Look for "Suggested commit message:" or similar
-  // Return commit message string
-}
-```
-
-</adapter_functions>
-```
-
-**Modified execution flow in `<execute_tasks>`:**
-
+**Implementation (new step after identify_plan):**
 ```xml
-<step name="execute_tasks">
+<step name="parse_specialist_assignments">
+
+For each PLAN.md in the phase:
+
+```bash
+# Extract specialist assignments from ALL tasks
+parse_task_specialists() {
+  local plan_file="$1"
+
+  # Parse each task
+  while IFS= read -r task_block; do
+    # Extract specialist attribute if present
+    if echo "$task_block" | grep -q 'specialist="[^"]*"'; then
+      SPECIALIST=$(echo "$task_block" | grep -o 'specialist="[^"]*"' | cut -d'"' -f2)
+    else
+      SPECIALIST=""  # No specialist assigned
+    fi
+
+    # Extract task details
+    TASK_NAME=$(echo "$task_block" | grep -oP '<name>\K[^<]+')
+    TASK_FILES=$(echo "$task_block" | grep -oP '<files>\K[^<]+')
+    TASK_ACTION=$(echo "$task_block" | grep -oP '<action>\K[^<]+')
+    TASK_VERIFY=$(echo "$task_block" | grep -oP '<verify>\K[^<]+')
+    TASK_DONE=$(echo "$task_block" | grep -oP '<done>\K[^<]+')
+
+    # Store routing decision
+    if [[ -n "$SPECIALIST" ]]; then
+      TASKS["$task_num"]="specialist:$SPECIALIST"
+    else
+      TASKS["$task_num"]="direct"
+    fi
+  done < <(sed -n '/<task/,/<\/task>/p' "$plan_file")
+}
+```
+
+</step>
+
+<step name="execute_with_routing">
+
 For each task:
 
-1. **NEW: Domain detection**
-   ```bash
-   ROUTE=$(detect_task_route "$TASK_DESC" "$TASK_TYPE")
-   ```
+```bash
+if [[ "${TASKS[$task_num]}" == specialist:* ]]; then
+  # Extract specialist name
+  SPECIALIST="${TASKS[$task_num]#specialist:}"
 
-2. **If route is "DELEGATE":**
-   - Build specialist prompt via gsd-task-adapter()
-   - Spawn specialist via Task(subagent_type="${SPECIALIST}", prompt="${ADAPTED_PROMPT}")
-   - Parse specialist output via gsd-result-adapter()
-   - Validate verification passed
-   - Commit using extracted message and files
-   - Track completion + specialist used
+  # Build specialist prompt (adapter logic)
+  SPECIALIST_PROMPT=$(cat <<EOF
+<task_context>
+**Task:** $TASK_NAME
 
-3. **If route is "DIRECT" (EXISTING FLOW):**
-   - Execute task normally
-   - Apply deviation rules
-   - Run verification
-   - Commit
-   - Track completion
+**Objective:**
+$TASK_ACTION
 
-4. After all tasks: create SUMMARY.md (include specialist usage metadata)
+**Files to modify:**
+$TASK_FILES
+
+**Verification:**
+$TASK_VERIFY
+
+**Success criteria:**
+$TASK_DONE
+</task_context>
+
+<files_to_read>
+- CLAUDE.md (project conventions)
+- .agents/skills/ (project patterns)
+$(echo "$TASK_FILES" | sed 's/^/- /')
+</files_to_read>
+
+<gsd_execution_rules>
+**CRITICAL:** You must follow these execution rules:
+
+1. **Atomic Commits Only**
+   - Commit ONLY files related to this task
+   - Use format: {type}(${PHASE}-${PLAN}): {description}
+   - Types: feat, fix, test, refactor, chore
+
+2. **Report Deviations**
+   - Bug fixes → [Rule 1 - Bug]
+   - Missing critical → [Rule 2 - Missing Critical]
+   - Blocking issues → [Rule 3 - Blocking]
+
+3. **Output Format**
+   Return structured output with:
+   - files_modified: [list]
+   - verification_status: passed|failed
+   - commit_message: "type(${PHASE}-${PLAN}): description"
+   - deviations: [list of {rule, description, fix}]
+</gsd_execution_rules>
+EOF
+)
+
+  # Spawn specialist via Task()
+  echo "→ Delegating to $SPECIALIST..."
+  Task(
+    subagent_type="$SPECIALIST",
+    model="$EXECUTOR_MODEL",
+    prompt="$SPECIALIST_PROMPT",
+    description="Task ${PHASE}-${PLAN}-${task_num}"
+  )
+
+  # Parse specialist result (orchestrator parses output)
+  # Update STATE.md via gsd-tools
+
+else
+  # Direct execution via gsd-executor
+  echo "→ Executing directly..."
+  Task(
+    subagent_type="gsd-executor",
+    model="$EXECUTOR_MODEL",
+    prompt="@gsd-executor.md
+           <files_to_read>
+           - $PLAN_FILE
+           - .planning/STATE.md
+           - CLAUDE.md
+           </files_to_read>
+           Execute tasks $task_num through $task_num",
+    description="Execute ${PHASE}-${PLAN}"
+  )
+fi
+```
+
 </step>
 ```
 
-### 3. PLAN.md Format (OPTIONAL ENHANCEMENT)
+### Point 4: State Management (UNCHANGED)
 
-**Current:** Tasks don't specify domain explicitly
+**Constraint:** Single-writer pattern preserved
 
-**Optional addition for Phase 2+:**
+**Implementation:** Orchestrator (not specialists) updates STATE.md
 
-```yaml
-<task type="auto" domain="python">
-  Migrate user authentication to FastAPI
-  <verification>Tests pass, auth endpoints respond</verification>
+```bash
+# After specialist OR executor returns
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs state advance-plan
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs state update-progress
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs state record-metric \
+  --phase "$PHASE" --plan "$PLAN" --duration "$DURATION"
+```
+
+**Why:** Specialists don't have access to STATE.md write operations. Orchestrator remains single writer.
+
+## Architectural Patterns
+
+### Pattern 1: Orchestrator-Mediated Delegation
+
+**What:** Only orchestrator spawns subagents. Subagents NEVER call Task().
+
+**Why:** Tool access constraint. Only main Claude (orchestrator) has Task tool.
+
+**How implemented:**
+- Planner: Assigns specialist field in PLAN.md
+- Orchestrator: Reads field, spawns appropriate subagent
+- Subagent: Executes, returns result (no further spawning)
+
+**Trade-offs:**
+- Pro: Clear responsibility, no coordination failures
+- Pro: Preserves single-writer state pattern
+- Con: Extra parse step (read PLAN.md, extract specialist field)
+
+### Pattern 2: Declarative Routing via PLAN.md
+
+**What:** Routing decisions made at planning time, embedded as specialist attribute in task XML.
+
+**Why:** Planner has domain knowledge, complexity signals, specialist availability.
+
+**How implemented:**
+```xml
+<task type="auto" specialist="python-pro">
+  ...
 </task>
 ```
 
-**Benefit:** Explicit hint for domain detection (fallback to keyword analysis if missing)
+**Trade-offs:**
+- Pro: Explicit routing visible in plan
+- Pro: Can be reviewed/edited before execution
+- Pro: Deterministic (no runtime surprises)
+- Con: Less dynamic than runtime routing
 
-### 4. SUMMARY.md Format (MINOR ADDITION)
+### Pattern 3: Fresh Context Windows
 
-**New metadata in frontmatter:**
+**What:** Spawn new subagent for each substantial task with full 200k context budget.
 
-```yaml
----
-specialist_usage:
-  - task: 3
-    specialist: python-pro
-    reason: Python FastAPI migration
-  - task: 5
-    specialist: postgres-pro
-    reason: Database schema optimization
-delegation_rate: "40%" # 2 of 5 tasks delegated
----
+**Why:** Prevents context degradation, maintains quality throughout execution.
+
+**How implemented:**
+- Each Task() call gets fresh context
+- Project conventions (CLAUDE.md, skills) loaded via files_to_read
+- No context carryover between tasks
+
+**Trade-offs:**
+- Pro: Quality maintained (no degradation curve)
+- Pro: Parallel execution possible
+- Con: Context transfer overhead (files_to_read parameter)
+
+### Pattern 4: Single-Writer State Pattern
+
+**What:** Only orchestrator writes STATE.md, ROADMAP.md, REQUIREMENTS.md.
+
+**Why:** Prevents concurrent write conflicts, maintains single source of truth.
+
+**How implemented:**
+- Specialists: Return results (files_modified, verification_status, deviations)
+- Orchestrator: Parses results, updates state via gsd-tools
+- gsd-executor: When executing directly, also returns (doesn't write state during task execution)
+
+**Trade-offs:**
+- Pro: No race conditions
+- Pro: Single source of truth
+- Con: Specialists can't update state directly (must return structured data)
+
+## New vs Modified Components
+
+### NEW Components
+
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| available_agents.md generator | Create specialist registry | plan-phase.md (new function) |
+| Specialist field parser | Extract specialist from task XML | execute-phase.md (new function) |
+| Specialist prompt builder | Build specialist-friendly prompts | execute-phase.md (new function) |
+| Specialist result parser | Parse specialist output | execute-phase.md (new function) |
+
+### MODIFIED Components
+
+| Component | Change | Impact |
+|-----------|--------|--------|
+| plan-phase.md | Add available_agents.md generation before planner spawn | +30 lines |
+| gsd-planner.md | Add specialist assignment logic to task creation | +150 lines |
+| execute-phase.md | Add specialist field parsing and routing | +200 lines |
+
+### UNCHANGED Components
+
+| Component | Why Unchanged |
+|-----------|---------------|
+| gsd-executor.md | No longer attempts delegation (v1.21 broken code removed) |
+| gsd-verifier.md | Independent of execution path |
+| STATE.md management | Single-writer via orchestrator preserved |
+| Checkpoint protocol | Works regardless of executor type |
+| Deviation rules | Apply to all execution modes |
+| Commit protocol | Specialist commits handled by orchestrator |
+
+## Data Structures
+
+### PLAN.md with Specialist Field
+
+```xml
+<task type="auto" specialist="python-pro">
+  <name>Implement FastAPI authentication</name>
+  <files>
+    src/api/auth.py
+    src/models/user.py
+    tests/test_auth.py
+  </files>
+  <action>
+    Create POST /auth/login endpoint accepting email and password.
+    Use bcrypt for password hashing, jose library for JWT tokens.
+    Return JWT in httpOnly cookie with 15-min expiry.
+  </action>
+  <verify>
+    pytest tests/test_auth.py::test_login
+    pytest tests/test_auth.py::test_invalid_credentials
+  </verify>
+  <done>
+    Valid credentials return 200 with JWT cookie.
+    Invalid credentials return 401.
+    Tests pass.
+  </done>
+</task>
 ```
 
-**Body section addition:**
+### available_agents.md Format
 
 ```markdown
-## Specialist Delegation
+# Available Specialists
 
-| Task | Specialist | Outcome |
-|------|-----------|---------|
-| 3 | python-pro | ✓ Completed - Auth migrated to FastAPI |
-| 5 | postgres-pro | ✓ Completed - Indexes optimized |
+VoltAgent specialists installed and available for delegation:
 
-**Delegation benefit:** Domain expertise improved test coverage (98% → 100%) and identified 2 security improvements (CORS, rate limiting) auto-applied via deviation rules.
+- python-pro
+- typescript-pro
+- golang-pro
+- rust-engineer
+- java-specialist
+- kubernetes-specialist
+- docker-expert
+- terraform-engineer
+- aws-architect
+- postgres-pro
+- mongodb-specialist
+- security-engineer
 ```
 
-### 5. Context Propagation
+### Specialist Result Format (Expected Output)
 
-**Challenge:** Specialists need project context but don't understand GSD formats
+```
+Implementation Summary:
+Created FastAPI authentication endpoint with JWT tokens. Used jose library for token generation, bcrypt for password hashing. Added httpOnly cookie with 15-min expiry.
 
-**Solution:** Adapter extracts and reformats
+Files Modified:
+- src/api/auth.py
+- src/models/user.py
+- tests/test_auth.py
 
-| GSD Context | Adapter Translation | Specialist Receives |
-|-------------|---------------------|---------------------|
-| PLAN.md `<objective>` | Plain text goal | "Build authentication for multi-tenant SaaS" |
-| PLAN.md `<context>` @-references | Resolve and summarize | "Uses PostgreSQL, existing user table schema: ..." |
-| CLAUDE.md | Include as file_to_read | Specialist reads directly |
-| .agents/skills/ | Include as file_to_read | Specialist reads directly |
-| STATE.md decisions | Extract relevant decisions | "Prior decisions: JWT tokens, no sessions" |
-| Previous task results | Summarize completions | "Auth routes created in tasks 1-2, now add Python impl" |
+Verification Results:
+✓ pytest tests/test_auth.py::test_login PASSED
+✓ pytest tests/test_auth.py::test_invalid_credentials PASSED
 
-**Key principle:** Specialists receive context as documentation, not GSD-specific XML/YAML.
+Deviations:
+- [Rule 2 - Missing Critical] Added input validation for email format (regex validation)
+- [Rule 2 - Missing Critical] Added rate limiting to prevent brute force (10 attempts/min)
 
-## New Components Needed
-
-### 1. Domain Detector Logic
-
-**File:** Part of `agents/gsd-executor.md`
-
-**Function:** `detect_task_route(task_description, task_type) → {route: "delegate"|"direct", specialist: "python-pro"|null, confidence: "high"|"medium"|"low"}`
-
-**Implementation approach:**
-
-```bash
-# Keyword matching (simple, works for MVP)
-detect_specialist_for_task() {
-  local desc="$1"
-
-  if echo "$desc" | grep -iE "python|fastapi|django|flask|pytest" >/dev/null; then
-    echo "python-pro"
-  elif echo "$desc" | grep -iE "typescript|react|next\.js|tsx" >/dev/null; then
-    echo "typescript-pro"
-  elif echo "$desc" | grep -iE "postgres|postgresql|database schema|sql" >/dev/null; then
-    echo "postgres-pro"
-  elif echo "$desc" | grep -iE "kubernetes|k8s|deployment|helm" >/dev/null; then
-    echo "kubernetes-specialist"
-  elif echo "$desc" | grep -iE "security|auth|cors|csrf|xss" >/dev/null; then
-    echo "security-engineer"
-  else
-    echo ""  # No match, use direct
-  fi
-}
+Suggested Commit Message:
+feat(03-02): implement JWT authentication with FastAPI
 ```
 
-**Enhancement for Phase 2:** LLM-based domain classification (more accurate but adds latency)
+## Build Order
 
-### 2. Adapter Functions
+### Phase 1: Infrastructure (Planner Integration)
 
-**File:** Part of `agents/gsd-executor.md` in new `<adapter_functions>` section
+**Goal:** Planner can assign specialists, orchestrator can parse
 
-**Functions:**
-- `gsd_task_adapter(task_context) → specialist_prompt`
-- `gsd_result_adapter(specialist_output) → gsd_completion`
+1. **available_agents.md generation**
+   - Add to plan-phase.md before planner spawn
+   - Scan ~/.claude/agents/, write registry
+   - Dependencies: None
 
-**Implementation:** JavaScript-style pseudocode in gsd-executor.md (Claude interprets during execution)
+2. **Planner specialist assignment**
+   - Add domain detection to gsd-planner.md
+   - Add specialist field to task XML
+   - Dependencies: available_agents.md exists
 
-### 3. VoltAgent Availability Detection
+3. **Orchestrator parsing**
+   - Add specialist field parser to execute-phase.md
+   - Extract specialist from task XML
+   - Dependencies: PLAN.md with specialist field
 
-**File:** Part of domain detector
+**Verification:** Planner creates PLAN.md with specialist fields. Orchestrator parses correctly.
 
-**Function:** `check_specialist_available(specialist_name) → boolean`
+### Phase 2: Orchestrator Spawning
 
-**Implementation:**
+**Goal:** Orchestrator spawns specialists via Task()
 
-```bash
-check_specialist_available() {
-  local specialist="$1"
-  [ -f ~/.claude/agents/${specialist}.md ]
-}
-```
+4. **Specialist prompt builder**
+   - Extract task details from PLAN.md
+   - Build specialist-friendly prompt
+   - Include GSD execution rules
+   - Dependencies: Specialist field parser
 
-**Caching:** Check once per gsd-executor invocation, not per task (specialists don't change mid-execution)
+5. **Specialist spawning**
+   - Call Task(subagent_type=specialist, ...)
+   - Pass built prompt
+   - Dependencies: Specialist prompt builder
 
-## Modified Components
+6. **Direct execution fallback**
+   - If no specialist field, spawn gsd-executor
+   - Preserve existing behavior
+   - Dependencies: None
 
-### gsd-executor.md
+**Verification:** Orchestrator spawns python-pro for Python tasks, gsd-executor for unassigned tasks.
 
-**Changes:**
+### Phase 3: Result Handling
 
-1. Add `<domain_detection>` section before `<execute_tasks>`
-2. Add `<adapter_functions>` section with gsd-task-adapter() and gsd-result-adapter()
-3. Modify `<execute_tasks>` step to include delegation routing
-4. Add specialist metadata to `<summary_creation>` template
-5. Update `<success_criteria>` to include specialist tracking
+**Goal:** Parse specialist output, update STATE.md
 
-**Estimated addition:** ~300 lines
+7. **Specialist result parser**
+   - Parse specialist output (heuristic text parsing)
+   - Extract files_modified, verification_status, deviations
+   - Fallback to git status if parsing fails
+   - Dependencies: Specialist spawning
 
-**Backward compatibility:** If domain detection returns "direct" for all tasks, behavior identical to v1.20.5
+8. **STATE.md updates**
+   - Orchestrator calls gsd-tools state commands
+   - Single-writer pattern preserved
+   - Dependencies: Result parser
 
-### execute-phase orchestrator
+9. **SUMMARY.md metadata**
+   - Track specialist usage
+   - Include delegation_rate
+   - Document specialist outcomes
+   - Dependencies: Result parser
 
-**Changes:** NONE
+**Verification:** Specialist completes task, orchestrator updates STATE.md correctly, SUMMARY.md includes specialist metadata.
 
-**Reason:** Orchestrator is unaware of delegation - still spawns gsd-executor normally
+### Phase 4: Validation & Robustness
 
-### gsd-verifier
+**Goal:** Handle errors, edge cases, graceful fallback
 
-**Changes:** NONE initially
+10. **Specialist availability check**
+    - Verify specialist exists before spawning
+    - Fallback to direct execution if missing
+    - Dependencies: Specialist spawning
 
-**Future enhancement:** Specialist verification agents (python-test-pro for Python tasks)
+11. **Result validation**
+    - Verify files exist on disk
+    - Validate commit message format
+    - Check verification passed
+    - Dependencies: Result parser
 
-## Architecture Patterns to Follow
+12. **Error handling**
+    - Specialist execution failure → fallback
+    - Parse error → fallback
+    - Missing fields → generate defaults
+    - Dependencies: All previous
 
-### 1. Thin Orchestrators, Fat Agents
-
-**Current pattern:** execute-phase orchestrator stays at ~15% context, spawns fresh gsd-executor per plan
-
-**Preserved:** Adapters don't change this. gsd-executor remains the "fat agent" with all execution logic.
-
-**Delegation adds:** Another layer of "fresh context" - specialists get 200k context just for their task
-
-### 2. Context Isolation via Task Tool
-
-**Current pattern:** Each Task() call gets fresh context window, no bleed between agents
-
-**Preserved:** Specialists are Task() calls, so same isolation
-
-**Data passing:** Orchestrator → gsd-executor via prompt. gsd-executor → specialist via adapter-built prompt. Specialist → gsd-executor via return value.
-
-### 3. File-Based State Management
-
-**Current pattern:** GSD writes STATE.md, ROADMAP.md, SUMMARY.md to disk. Agents read from disk.
-
-**Preserved:** Specialists don't write GSD state files. They modify code, return summaries. gsd-executor reads specialist output, writes state files as before.
-
-**Tradeoff:** Specialists can't directly update STATE.md (good - single responsibility)
-
-### 4. Graceful Degradation
-
-**Current pattern:** If gsd-tools.cjs fails, fallback to manual parsing. If verifier unavailable, skip verification.
-
-**Added:** If specialist unavailable, execute directly. No error, no user prompt - silent fallback.
-
-**Logging:** Note delegation attempts in SUMMARY.md metadata for debugging
-
-### 5. Structured Returns
-
-**Current pattern:** Subagents return markdown with `## PLANNING COMPLETE` or `## VERIFICATION PASSED` headers
-
-**Extended:** Specialists return structured output (parsed by gsd-result-adapter), gsd-executor continues with structured data
-
-**Format:** Adapter defines expected output format in specialist prompt, then parses return
+**Verification:** Missing specialist gracefully falls back. Parse errors don't break execution.
 
 ## Anti-Patterns to Avoid
 
-### ❌ Adapters as Separate Agents
+### ❌ Subagent Task Invocation (v1.21 Mistake)
 
-**Why bad:** Adds orchestration complexity, another context window, more coordination
+**What NOT to do:**
+```typescript
+// In gsd-executor.md (WRONG - this is what v1.21 tried)
+Task(subagent_type="python-pro", ...) // FAILS - no Task access
+```
 
-**Instead:** Inline functions in gsd-executor that build/parse prompts
+**Why wrong:** Subagents don't have Task tool access
 
-### ❌ Specialists Writing GSD State Files
+**Do this instead:**
+```typescript
+// In gsd-planner.md (planning time)
+<task specialist="python-pro">...</task>
 
-**Why bad:** Specialists don't understand GSD state format, leads to corruption
+// In execute-phase.md (orchestrator)
+Task(subagent_type="python-pro", ...)  // ✓ Orchestrator has Task access
+```
 
-**Instead:** Specialists return data, gsd-executor writes state files
+### ❌ Specialist State File Writes
 
-### ❌ Detection at Plan Level
+**What NOT to do:**
+```bash
+# In specialist context (WRONG)
+echo "completed" >> .planning/STATE.md
+```
 
-**Why bad:** Plans mix domains (auth setup + Python migration + DB schema = 3 specialists)
+**Why wrong:** Breaks single-writer pattern, causes corruption
 
-**Instead:** Detect per-task, allows mixed specialist usage within one plan
+**Do this instead:**
+```bash
+# Specialist returns result
+# Orchestrator updates state:
+node gsd-tools.cjs state advance-plan
+```
+
+### ❌ Runtime Routing in Executor
+
+**What NOT to do:**
+```bash
+# In gsd-executor (WRONG)
+if [[ "$TASK" == *"python"* ]]; then
+  Task(subagent_type="python-pro", ...)  # FAILS - no Task access
+fi
+```
+
+**Why wrong:** Executor can't spawn subagents
+
+**Do this instead:**
+```xml
+<!-- In gsd-planner (planning time) -->
+<task specialist="python-pro">...</task>
+<!-- Orchestrator spawns based on field -->
+```
 
 ### ❌ Requiring VoltAgent Plugins
 
-**Why bad:** Breaks existing users, mandatory dependency
-
-**Instead:** Graceful fallback - if not installed, execute directly
-
-### ❌ Specialist-Specific Deviation Rules
-
-**Why bad:** Specialists have different fix patterns, hard to standardize
-
-**Instead:** Specialist reports deviations in output, gsd-executor applies existing deviation rules to categorize
-
-### ❌ LLM-Based Domain Detection for MVP
-
-**Why bad:** Adds latency, complexity, potential failure modes
-
-**Instead:** Keyword matching for MVP (simple, fast, deterministic). Upgrade to LLM in Phase 2 if needed.
-
-## Scalability Considerations
-
-### At 10 Specialists (MVP)
-
-**Approach:** Hardcoded keyword mapping in domain detector
-
-**Performance:** Instant detection, deterministic routing
-
-**Maintenance:** Add mappings manually when new specialists added
-
-### At 50 Specialists
-
-**Approach:** Specialist metadata catalog (JSON file mapping keywords → specialists)
-
-**Performance:** O(1) lookup, still fast
-
-**Maintenance:** Update catalog when installing new specialist plugins
-
-### At 127+ Specialists (Full VoltAgent)
-
-**Approach:** Multi-specialist routing (coordinator delegates to coordinator)
-
-**Performance:** Use multi-agent-coordinator specialist for complex tasks
-
-**Maintenance:** Let multi-agent-coordinator decide which specialists to invoke
-
-**Example flow:**
-```
-gsd-executor
-  → Detects: "Complex full-stack auth with Python + React + Postgres"
-  → Routes to: multi-agent-coordinator specialist
-  → Coordinator spawns: python-pro, typescript-pro, postgres-pro
-  → Coordinator synthesizes results
-  → gsd-result-adapter parses coordinator output
-  → gsd-executor commits and updates state
+**What NOT to do:**
+```bash
+# Check specialist exists, error if missing (WRONG)
+if [[ ! -f ~/.claude/agents/python-pro.md ]]; then
+  echo "ERROR: python-pro not installed"
+  exit 1
+fi
 ```
 
-## Build Order (Suggested Phasing)
+**Why wrong:** Breaks users without plugins
 
-### Phase 1: Foundation (Tasks 1-3)
+**Do this instead:**
+```bash
+# Graceful fallback
+if [[ -f ~/.claude/agents/python-pro.md ]]; then
+  # Spawn specialist
+else
+  # Direct execution
+fi
+```
 
-**Goal:** Minimal delegation capability without breaking existing flow
+## Validation Checklist
 
-1. **Domain detector with 5 specialists**
-   - Implement keyword-based detection
-   - Support: python-pro, typescript-pro, postgres-pro, kubernetes-specialist, security-engineer
-   - Graceful fallback if specialists missing
+### Planning Phase
 
-2. **gsd-task-adapter() function**
-   - Build specialist prompts from GSD context
-   - Include project files (CLAUDE.md, skills)
-   - Specify verification criteria
+- [ ] available_agents.md generated with installed specialists
+- [ ] gsd-planner reads available_agents.md
+- [ ] gsd-planner assigns specialist field when applicable
+- [ ] PLAN.md contains `<task specialist="...">` for qualifying tasks
+- [ ] PLAN.md contains `<task>` (no specialist) for others
 
-3. **gsd-result-adapter() function**
-   - Parse specialist output
-   - Extract files modified, commit message, deviations
-   - Validate required fields present
+### Execution Phase
 
-**Verification:** Execute a Python task with python-pro installed → task delegated, committed, tracked. Execute same task without python-pro → direct execution, identical result.
+- [ ] execute-phase.md parses specialist field from task XML
+- [ ] Orchestrator spawns specialist via Task() when field present
+- [ ] Orchestrator spawns gsd-executor when field absent
+- [ ] Specialist prompt includes task context, project files, GSD rules
+- [ ] Specialist executes and returns structured output
 
-### Phase 2: Enrichment (Tasks 4-6)
+### State Management
 
-**Goal:** Better detection, specialist catalog, metadata tracking
+- [ ] Orchestrator parses specialist result
+- [ ] Orchestrator updates STATE.md via gsd-tools (single-writer)
+- [ ] Orchestrator updates ROADMAP.md progress
+- [ ] Orchestrator updates REQUIREMENTS.md checkboxes
+- [ ] SUMMARY.md includes specialist usage metadata
 
-4. **Expand specialist mappings to 20**
-   - Add language specialists (golang-pro, rust-engineer, java-expert)
-   - Add infra specialists (docker-expert, terraform-engineer)
-   - Add domain specialists (api-designer, database-optimizer)
+### Backward Compatibility
 
-5. **Specialist usage tracking**
-   - Add metadata to SUMMARY.md frontmatter
-   - Track delegation rate, specialist outcomes
-   - Log fallback occurrences
-
-6. **Context propagation improvements**
-   - Better @-reference resolution in adapter
-   - Include relevant STATE.md decisions
-   - Pass previous task summaries for continuity
-
-**Verification:** Execute mixed-domain plan → tasks routed to appropriate specialists, metadata tracked, SUMMARY shows delegation breakdown.
-
-### Phase 3: Orchestration (Tasks 7-9)
-
-**Goal:** Multi-specialist coordination for complex tasks
-
-7. **multi-agent-coordinator integration**
-   - Detect complex multi-domain tasks
-   - Route to multi-agent-coordinator specialist
-   - Parse coordinator's multi-specialist results
-
-8. **Specialist availability caching**
-   - Check installed specialists once per executor invocation
-   - Build specialist registry at startup
-   - Avoid repeated filesystem checks
-
-9. **LLM-based domain classification** (optional)
-   - Use Claude to classify task domain when keywords ambiguous
-   - Fallback to keyword matching if classification fails
-   - Track accuracy vs keyword matching
-
-**Verification:** Execute complex task requiring 3+ specialists → multi-agent-coordinator delegates appropriately, results synthesized, single commit created.
-
-### Phase 4: Optimization (Tasks 10-12)
-
-**Goal:** Performance, error handling, edge cases
-
-10. **Error recovery for specialist failures**
-    - If specialist fails, attempt direct execution
-    - Track failure reason in SUMMARY
-    - Surface specialist errors clearly
-
-11. **Specialist output validation**
-    - Verify specialist completed verification
-    - Check files exist on disk
-    - Validate commit message format
-
-12. **Performance monitoring**
-    - Track delegation overhead (time)
-    - Compare specialist vs direct execution quality
-    - Identify high-value delegation patterns
-
-**Verification:** Force specialist failure → gsd-executor recovers gracefully, task completed via direct execution, failure logged in SUMMARY.
-
-## Integration Testing Checkpoints
-
-### Checkpoint 1: Hello World Delegation
-
-**Test:** Single Python task with python-pro installed
-
-**Expected:**
-- Domain detector identifies "python" keywords
-- gsd-task-adapter builds prompt with project context
-- Task() spawns python-pro specialist
-- Specialist completes task
-- gsd-result-adapter parses output
-- gsd-executor commits with proper message
-- SUMMARY.md shows specialist usage
-
-**Pass criteria:** Task completes, commit created, SUMMARY accurate
-
-### Checkpoint 2: Graceful Fallback
-
-**Test:** Same Python task WITHOUT python-pro installed
-
-**Expected:**
-- Domain detector checks ~/.claude/agents/python-pro.md
-- File not found → route = "direct"
-- gsd-executor executes task normally
-- No specialist invocation
-- Identical commit and SUMMARY format
-
-**Pass criteria:** Task completes identically to manual execution, no errors
-
-### Checkpoint 3: Mixed Domain Plan
-
-**Test:** Plan with 5 tasks: documentation, Python, TypeScript, database, deployment
-
-**Expected:**
-- Task 1 (docs): direct
-- Task 2 (Python): python-pro
-- Task 3 (TypeScript): typescript-pro
-- Task 4 (database): postgres-pro
-- Task 5 (deployment): direct (assuming no k8s specialist)
-
-**Pass criteria:** Each task routed correctly, SUMMARY shows 3/5 delegated
-
-### Checkpoint 4: Context Propagation
-
-**Test:** Multi-task plan where task 3 depends on tasks 1-2
-
-**Expected:**
-- Adapter for task 3 includes summaries of tasks 1-2
-- Specialist receives "built so far" context
-- Specialist builds on previous work correctly
-
-**Pass criteria:** Task 3 references previous task outputs, no duplication
-
-### Checkpoint 5: Deviation Tracking
-
-**Test:** Specialist auto-fixes bug during execution
-
-**Expected:**
-- Specialist reports deviation in output
-- gsd-result-adapter extracts deviation
-- gsd-executor categorizes via existing deviation rules
-- SUMMARY.md documents deviation under "Auto-fixed Issues"
-
-**Pass criteria:** Deviation tracked correctly, matches existing format
-
-## Decision Log
-
-| Decision | Rationale | Alternatives Considered |
-|----------|-----------|------------------------|
-| Adapters as inline functions | Keeps gsd-executor self-contained | Separate adapter agents (rejected: too complex) |
-| Task-level detection | Plans mix domains | Plan-level detection (rejected: too coarse) |
-| Keyword-based detection MVP | Simple, deterministic, fast | LLM classification (deferred to Phase 3) |
-| Task() for specialist invocation | Reuses existing pattern | Direct specialist calls (rejected: no isolation) |
-| Graceful fallback implicit | No user friction | Prompt user to install specialists (rejected: breaks flow) |
-| State management stays in executor | Single responsibility | Specialists write state (rejected: corruption risk) |
-
-## Open Questions for Phase-Specific Research
-
-1. **Specialist communication protocol:** Can specialists message each other directly (like Agent Teams)? Or only through gsd-executor?
-
-2. **Multi-agent-coordinator capabilities:** Does it handle GSD context automatically or does adapter need to translate?
-
-3. **Specialist context limits:** Do specialists inherit parent context window size or get fresh 200k?
-
-4. **Nested delegation depth:** Can specialists spawn sub-specialists? Max depth?
-
-5. **Specialist versioning:** How to handle specialist updates? Do we pin versions?
+- [ ] PLAN.md without specialist field → direct execution
+- [ ] No VoltAgent plugins → all tasks execute directly
+- [ ] Existing v1.21 PLANs work unchanged
 
 ## Sources
 
-- **HIGH confidence:** GSD codebase analysis (agents/gsd-executor.md, workflows/execute-phase.md)
-- **HIGH confidence:** Task tool usage patterns (10+ examples in workflows/)
-- **MEDIUM confidence:** VoltAgent structure (GitHub repo README, no hands-on verification)
-- **MEDIUM confidence:** Specialist invocation patterns (inferred from VoltAgent docs, not tested)
-- **LOW confidence:** Multi-agent-coordinator capabilities (mentioned in PROJECT.md, not documented)
+**PRIMARY (HIGH confidence):**
+- agents/gsd-executor.md (lines 1-2067) — adapter functions, delegation logic (v1.21)
+- agents/gsd-planner.md (lines 1-1195) — task creation, frontmatter structure
+- workflows/plan-phase.md (lines 1-479) — orchestrator for planning
+- workflows/execute-phase.md (lines 1-446) — orchestrator for execution
+- PROJECT.md (lines 1-106) — v1.22 goals, constraints
 
-## Validation Needed
+**VALIDATION (HIGH confidence):**
+- v1.21 shipped with broken delegation (executor assumed Task access)
+- v1.22 fixes by moving delegation to orchestrator level
+- Tool access verified: only main Claude has Task tool (subagents don't)
 
-- [ ] Verify specialist invocation syntax: `Task(subagent_type="python-pro")` works?
-- [ ] Test specialist output format: Is it structured or freeform?
-- [ ] Confirm VoltAgent detection: Is `~/.claude/agents/` the correct path?
-- [ ] Validate multi-agent-coordinator exists in voltagent-meta plugin
-- [ ] Test graceful fallback: Does missing specialist error or silently skip?
+---
+*Architecture research for: Orchestrator-mediated specialist delegation*
+*Researched: 2026-02-22*

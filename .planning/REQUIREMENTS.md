@@ -16,17 +16,17 @@ Requirements for orchestrator-mediated specialist delegation. Each maps to roadm
 
 ### Planning Integration
 
-- [ ] **PLAN-01**: Planner reads available_agents.md as context
-- [ ] **PLAN-02**: Planner detects task domain using keyword patterns (reuse v1.21)
-- [ ] **PLAN-03**: Planner assigns specialist attribute to tasks in PLAN.md
-- [ ] **PLAN-04**: Planner validates specialist exists before assignment
-- [ ] **PLAN-05**: Tasks without matching domain get specialist=null (direct execution)
+- [x] **PLAN-01**: Planner reads available_agents.md as context
+- [x] **PLAN-02**: Planner detects task domain using keyword patterns (reuse v1.21)
+- [x] **PLAN-03**: Planner assigns specialist attribute to tasks in PLAN.md
+- [x] **PLAN-04**: Planner validates specialist exists before assignment
+- [x] **PLAN-05**: Tasks without matching domain get specialist=null (direct execution)
 
 ### Orchestrator Spawning
 
 - [ ] **SPAWN-01**: Orchestrator reads specialist field from PLAN.md tasks
 - [ ] **SPAWN-02**: Orchestrator spawns specialist via Task(subagent_type=...)
-- [ ] **SPAWN-03**: Orchestrator injects context via files_to_read (content, not paths)
+- [ ] **SPAWN-03**: Orchestrator injects context via files_to_read (paths, not content)
 - [ ] **SPAWN-04**: Orchestrator falls back to gsd-executor if specialist=null
 - [ ] **SPAWN-05**: Orchestrator falls back to gsd-executor if specialist unavailable
 
@@ -85,11 +85,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DISC-02 | Phase 7 | Complete |
 | DISC-03 | Phase 7 | Complete |
 | DISC-04 | Phase 7 | Complete |
-| PLAN-01 | Phase 7 | Pending |
-| PLAN-02 | Phase 7 | Pending |
-| PLAN-03 | Phase 7 | Pending |
-| PLAN-04 | Phase 7 | Pending |
-| PLAN-05 | Phase 7 | Pending |
+| PLAN-01 | Phase 7 | Complete |
+| PLAN-02 | Phase 7 | Complete |
+| PLAN-03 | Phase 7 | Complete |
+| PLAN-04 | Phase 7 | Complete |
+| PLAN-05 | Phase 7 | Complete |
 | SPAWN-01 | Phase 8 | Pending |
 | SPAWN-02 | Phase 8 | Pending |
 | SPAWN-03 | Phase 8 | Pending |

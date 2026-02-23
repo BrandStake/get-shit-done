@@ -196,27 +196,33 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    }
    ```
 
-   **Validate specialist availability and spawn executor agents:**
+   **Validate all specialist assignments:**
+
+   After parsing specialists from plan, validate each entry and update array with validated values:
+   ```bash
+   # Validate all specialist assignments
+   echo "Validating specialist assignments..."
+   for i in "${!SPECIALISTS[@]}"; do
+     ORIGINAL="${SPECIALISTS[$i]}"
+     VALIDATED=$(validate_specialist "$ORIGINAL" "$i")
+     SPECIALISTS[$i]="$VALIDATED"
+
+     if [ "$ORIGINAL" != "$VALIDATED" ]; then
+       echo "  Task $i: $ORIGINAL → $VALIDATED (fallback applied)"
+     fi
+   done
+
+   # Count unique specialists for reporting
+   UNIQUE_SPECIALISTS=$(printf '%s\n' "${SPECIALISTS[@]}" | sort -u | paste -sd, -)
+   echo "Specialists for this plan: $UNIQUE_SPECIALISTS"
+   ```
+
+   **Spawn executor agents with validated specialists:**
 
    For each plan (or task if spawning individually):
    ```bash
-   # Get specialist for current task/plan
+   # Get validated specialist for current task/plan
    CURRENT_SPECIALIST="${SPECIALISTS[$TASK_NUM]:-gsd-executor}"
-
-   # Validate specialist availability
-   if [ -n "$CURRENT_SPECIALIST" ] && [ "$CURRENT_SPECIALIST" != "gsd-executor" ]; then
-     # Check if specialist exists in available_agents.md
-     if [ ! -f .planning/available_agents.md ]; then
-       echo "Warning: available_agents.md missing, falling back to gsd-executor" >&2
-       CURRENT_SPECIALIST="gsd-executor"
-     elif ! grep -q "^- \*\*${CURRENT_SPECIALIST}\*\*:" .planning/available_agents.md; then
-       echo "Warning: Specialist '${CURRENT_SPECIALIST}' not available, falling back to gsd-executor" >&2
-       CURRENT_SPECIALIST="gsd-executor"
-     fi
-   else
-     # No specialist assigned or already gsd-executor
-     CURRENT_SPECIALIST="gsd-executor"
-   fi
 
    echo "Spawning ${CURRENT_SPECIALIST} for plan {plan_id}..."
    ```

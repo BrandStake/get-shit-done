@@ -148,6 +148,54 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    echo "Parsed ${#SPECIALISTS[@]} specialist assignments from plan"
    ```
 
+   ## Specialist Fallback Logic
+
+   The orchestrator applies a three-tier fallback when determining which specialist to spawn:
+
+   1. **Null/Empty** → gsd-executor (no specialist assigned)
+   2. **"null" string** → gsd-executor (explicit null assignment)
+   3. **Unavailable** → gsd-executor (specialist not in roster)
+
+   This ensures every task can execute even if the ideal specialist isn't available.
+
+   ```bash
+   # Three-tier fallback for each specialist
+   validate_specialist() {
+     local SPECIALIST="$1"
+     local TASK_NUM="$2"
+
+     # Tier 1: No specialist assigned (empty/unset)
+     if [ -z "$SPECIALIST" ]; then
+       echo "Task $TASK_NUM: No specialist assigned, using gsd-executor" >&2
+       echo "gsd-executor"
+       return
+     fi
+
+     # Tier 2: Explicit null assignment
+     if [ "$SPECIALIST" = "null" ]; then
+       echo "Task $TASK_NUM: Specialist is null, using gsd-executor" >&2
+       echo "gsd-executor"
+       return
+     fi
+
+     # Tier 3: Check availability in roster
+     if [ ! -f .planning/available_agents.md ]; then
+       echo "Warning: available_agents.md missing, falling back to gsd-executor" >&2
+       echo "gsd-executor"
+       return
+     fi
+
+     if ! grep -q "^- \*\*${SPECIALIST}\*\*:" .planning/available_agents.md; then
+       echo "Warning: Specialist '${SPECIALIST}' not available, falling back to gsd-executor" >&2
+       echo "gsd-executor"
+       return
+     fi
+
+     # Specialist is valid and available
+     echo "$SPECIALIST"
+   }
+   ```
+
    **Validate specialist availability and spawn executor agents:**
 
    For each plan (or task if spawning individually):

@@ -73,11 +73,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Planner assigns specialist attribute to tasks in PLAN.md based on domain detection
   4. Tasks without matching domain get specialist=null (direct execution)
   5. Planner validates specialist exists before assignment (prevents spawn failures)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD during planning
-- [ ] 07-02: TBD during planning
+- [ ] 07-01-PLAN.md — Agent enumeration in gsd-tools and orchestrator validation
+- [ ] 07-02-PLAN.md — Planning integration with specialist assignment
 
 ### Phase 8: Orchestrator Spawning (Specialist Spawning & Context Passing)
 **Goal**: Orchestrator spawns specialists with proper context injection
@@ -133,7 +133,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Infrastructure | 0/TBD | Not started | - |
+| 7. Infrastructure | 0/2 | Planned | - |
 | 8. Orchestrator Spawning | 0/TBD | Not started | - |
 | 9. Result Handling | 0/TBD | Not started | - |
 | 10. Error Recovery & Cleanup | 0/TBD | Not started | - |

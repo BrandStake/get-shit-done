@@ -8,6 +8,24 @@ A meta-prompting, context engineering, and spec-driven development system for Cl
 
 Give Claude everything it needs to do the work AND verify it - no manual context management, no quality degradation, no guessing.
 
+## Current State
+
+**Latest release:** v1.21 Hybrid Agent Team Execution (shipped 2026-02-23)
+
+**What shipped:**
+- Domain detection with keyword-based pattern matching for 127+ VoltAgent specialists
+- Task and result adapter layers for GSD-to-specialist context translation
+- Co-authored commits with specialist attribution
+- Structured delegation logging and observability
+- Single-writer state pattern enforcement
+- Comprehensive test suite (200+ tests) with mock specialists
+
+**Known limitation (discovered post-milestone):**
+- Specialist delegation architecture assumes gsd-executor has Task tool access
+- However, subagents spawned via Task() do NOT have Task tool access
+- This means delegation code in gsd-executor cannot actually delegate to specialists
+- Will be addressed in v1.22 with orchestrator-mediated delegation
+
 ## Requirements
 
 ### Validated
@@ -22,10 +40,15 @@ Give Claude everything it needs to do the work AND verify it - no manual context
 - Model profiles (quality/balanced/budget) (v1.9.0)
 - gsd-tools CLI for deterministic operations (v1.12-v1.17)
 - Cross-platform support: Claude Code, OpenCode, Gemini CLI (v1.10)
+- ✓ Domain detection and specialist registry — v1.21
+- ✓ Task/result adapter layers — v1.21
+- ✓ Co-authored commits — v1.21
+- ✓ Delegation logging — v1.21
+- ✓ Single-writer state pattern — v1.21
 
 ### Active
 
-- [ ] Hybrid agent team execution with VoltAgent integration
+(None — run `/gsd:new-milestone` to define next milestone requirements)
 
 ### Out of Scope
 
@@ -33,73 +56,34 @@ Give Claude everything it needs to do the work AND verify it - no manual context
 - GUI/web interface — CLI-first design
 - Custom model training — uses existing Claude models
 
-## Current Milestone: v1.21 Hybrid Agent Team Execution
-
-**Goal:** Modify GSD's execution workflow so gsd-executor delegates tasks to specialized VoltAgent subagents based on task domain, creating a "team" of experts instead of one generalist executor.
-
-**Target features:**
-- Task domain analysis to identify required specialists
-- Integration with VoltAgent subagent plugins (127+ specialists)
-- Hybrid coordination layer (gsd-executor + multi-agent-coordinator)
-- Specialist reporting format compatible with GSD state management
-- Preserved GSD guarantees: atomic commits, deviation rules, checkpoints
-
 ## Context
 
 **VoltAgent plugins installed globally:**
 - voltagent-core-dev, voltagent-lang, voltagent-infra, voltagent-qa-sec, voltagent-data-ai
 - voltagent-dev-exp, voltagent-domains, voltagent-biz, voltagent-meta, voltagent-research
 
-**Example specialists:**
-- python-pro, typescript-pro, golang-pro (language experts)
-- kubernetes-specialist, docker-expert, terraform-engineer (infra)
-- security-engineer, penetration-tester (security)
-- postgres-pro, database-optimizer (data)
-- multi-agent-coordinator, workflow-orchestrator (coordination)
-
-**Current execution flow:**
-```
-execute-phase orchestrator
-    ↓
-spawns gsd-executor per plan (generalist)
-    ↓
-executes all tasks regardless of domain
-```
-
-**Target execution flow (with adapter layers):**
-```
-execute-phase orchestrator (unchanged)
-    ↓
-gsd-executor (maintains GSD state awareness)
-    ↓
-gsd-task-adapter (translates GSD task → specialist prompt)
-    ↓
-multi-agent-coordinator (from voltagent-meta)
-    ↓
-specialist (python-pro, typescript-pro, etc.)
-    ↓
-gsd-result-adapter (translates output → GSD completion format)
-    ↓
-gsd-executor (commits, updates state)
-```
-
-**Adapter benefits:** Clean separation, reusable, testable, easier to extend
+**Key architectural insight (v1.22):**
+- Only orchestrators (main Claude) have Task tool access
+- Subagents (gsd-executor, gsd-planner, etc.) do NOT have Task tool
+- Delegation must be orchestrator-mediated, not subagent-initiated
+- Available agents list must be passed to subagents via context files
 
 ## Constraints
 
 - **Backward compatibility**: Existing workflows must continue working
 - **GSD state management**: gsd-executor must remain the entry point to preserve STATE.md, PLAN.md, deviation rules, checkpoints, atomic commits
 - **VoltAgent availability**: Specialists only available when plugins installed globally
-- **Graceful fallback**: If specialist unavailable, gsd-executor handles task directly
+- **Graceful fallback**: If specialist unavailable, execute directly
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | gsd-executor as coordinator | Preserves GSD guarantees (state, commits, deviations) | ✓ Good |
-| Use multi-agent-coordinator | VoltAgent provides coordination expertise | ✓ Good |
 | Adapter pattern (task + result) | Clean separation, reusable, testable | ✓ Good |
-| Domain detection in executor | Task context available at execution time | — Pending |
+| Keyword matching for detection | Fast (<50ms), deterministic | ✓ Good |
+| Single-writer state pattern | Prevents coordination failures | ✓ Good |
+| Subagents lack Task tool | Discovered limitation, needs v1.22 fix | ⚠️ Revisit |
 
 ---
-*Last updated: 2026-02-22 after milestone v1.21 initialization*
+*Last updated: 2026-02-23 after v1.21 milestone completion*

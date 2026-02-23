@@ -26,6 +26,14 @@ Parse JSON for: `executor_model`, `verifier_model`, `commit_docs`, `parallelizat
 **If `state_exists` is false but `.planning/` exists:** Offer reconstruct or continue.
 
 When `parallelization` is false, plans within a wave execute sequentially.
+
+**Generate fresh agent roster for specialist validation:**
+
+```bash
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs agents enumerate --output .planning/available_agents.md
+```
+
+This creates an up-to-date roster of available VoltAgent specialists, excluding GSD system agents (gsd-*). The roster is used for specialist validation before spawning.
 </step>
 
 <step name="handle_branching">
@@ -94,14 +102,39 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    - Bad: "Executing terrain generation plan"
    - Good: "Procedural terrain generator using Perlin noise — creates height maps, biome zones, and collision meshes. Required before vehicle physics can interact with ground."
 
-2. **Spawn executor agents:**
+2. **Validate specialist availability and spawn executor agents:**
+
+   **Before spawning, validate specialist if task has specialist field:**
+
+   Read task frontmatter from plan file to check for specialist assignment:
+   ```bash
+   # Extract specialist field from task frontmatter
+   SPECIALIST=$(grep -A 10 "^<task" {plan_file} | grep "^specialist:" | head -n 1 | sed 's/specialist:\s*//' | xargs)
+
+   # If specialist assigned, validate availability
+   if [ -n "$SPECIALIST" ] && [ "$SPECIALIST" != "gsd-executor" ]; then
+     # Check if specialist exists in available_agents.md
+     if [ ! -f .planning/available_agents.md ]; then
+       echo "Warning: available_agents.md missing, falling back to gsd-executor" >&2
+       SPECIALIST="gsd-executor"
+     elif ! grep -q "^- \*\*${SPECIALIST}\*\*:" .planning/available_agents.md; then
+       echo "Warning: Specialist '${SPECIALIST}' not available, falling back to gsd-executor" >&2
+       SPECIALIST="gsd-executor"
+     fi
+   else
+     # No specialist assigned or already gsd-executor
+     SPECIALIST="gsd-executor"
+   fi
+   ```
+
+   **Spawn with validated specialist:**
 
    Pass paths only — executors read files themselves with their fresh 200k context.
    This keeps orchestrator context lean (~10-15%).
 
    ```
    Task(
-     subagent_type="gsd-executor",
+     subagent_type="${SPECIALIST}",
      model="{executor_model}",
      prompt="
        <objective>
@@ -135,6 +168,11 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      "
    )
    ```
+
+   **Error handling:**
+   - If available_agents.md missing → log error, fall back to gsd-executor
+   - If specialist field malformed → treat as null (use gsd-executor)
+   - If specialist not found in roster → log warning, fall back to gsd-executor
 
 3. **Wait for all agents in wave to complete.**
 

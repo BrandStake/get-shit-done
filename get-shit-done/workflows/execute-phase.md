@@ -260,44 +260,104 @@ $(if [ "$TIER" = "1" ]; then
 {Extract done criteria from task in plan file}
 EOF
 
-   # If tier > 0, spawn verification specialist
-   if [ "$TIER" -gt "0" ] && [ -n "$SPECIALISTS" ]; then
-     echo "Spawning verification specialist: $SPECIALISTS (Tier $TIER)"
+   # Handle case where no specialists are available
+   if [ -z "$AVAILABLE_SPECIALISTS" ]; then
+     echo "Warning: No verification specialists available, skipping verification"
+     VERIFICATION_PASSED=true
+   else
+     # Spawn verification specialists
+     echo "Spawning verification specialists..."
+     VERIFICATION_PASSED=true
+     AGGREGATED_ISSUES=""
+     AGGREGATED_SUGGESTIONS=""
 
-     VERIFICATION_RESULT=$(Task(
-       subagent_type="$SPECIALISTS",
-       model="{verifier_model}",
-       prompt="
-         <objective>
-         Review the implementation from plan {plan_id} of phase {phase_number}.
-         Verify code quality, security, patterns, and completeness.
-         </objective>
+     # Process each specialist
+     for SPECIALIST in $AVAILABLE_SPECIALISTS; do
+       echo "Spawning ${SPECIALIST} for verification..."
 
-         <files_to_read>
-         - /tmp/verification-brief.md (Verification context and focus)
-         - {phase_dir}/{plan_file} (Plan requirements)
-         - {phase_dir}/{plan_id}-SUMMARY.md (What was built)
-         - {modified_files from SUMMARY.md} (Changed code to review)
-         </files_to_read>
+       # Define specialist focus area
+       case $SPECIALIST in
+         code-reviewer) FOCUS_AREA="Code quality, patterns, security vulnerabilities" ;;
+         qa-expert) FOCUS_AREA="Test coverage, edge cases, quality metrics" ;;
+         principal-engineer) FOCUS_AREA="Architecture, scalability, production readiness" ;;
+         *) FOCUS_AREA="General verification" ;;
+       esac
 
-         <verification_focus>
-         Based on Tier $TIER, focus on:
-         - Tier 1: Code quality, patterns, obvious issues
-         - Tier 2: + Test coverage, edge cases, error handling
-         - Tier 3: + Security, performance, production readiness
-         </verification_focus>
+       # Create context file for this specialist
+       cat > /tmp/specialist-context.md << EOF
+# Specialist Verification Context
 
-         Return structured result:
-         - status: PASS/FAIL/WARNING
-         - issues: list of problems found (if any)
-         - suggestions: improvements (non-blocking)
-       "
-     ))
+**Specialist:** ${SPECIALIST}
+**Focus Area:** ${FOCUS_AREA}
+**Previous findings:** ${AGGREGATED_ISSUES:-None}
 
-     # Parse verification result
-     VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)
-     VERIFICATION_ISSUES=$(echo "$VERIFICATION_RESULT" | sed -n '/issues:/,/suggestions:/p' | grep "^- " | sed 's/^- //')
-     VERIFICATION_SUGGESTIONS=$(echo "$VERIFICATION_RESULT" | sed -n '/suggestions:/,$p' | grep "^- " | sed 's/^- //')
+Review with emphasis on: ${FOCUS_AREA}
+EOF
+
+       # Spawn the specialist
+       VERIFICATION_RESULT=$(Task(
+         subagent_type="${SPECIALIST}",
+         model="{verifier_model}",
+         prompt="
+           <objective>
+           Review the implementation from plan {plan_id} of phase {phase_number}.
+           Verify ${FOCUS_AREA}.
+           </objective>
+
+           <files_to_read>
+           - /tmp/verification-brief.md (Verification context and focus)
+           - /tmp/specialist-context.md (Your specific focus area)
+           - {phase_dir}/{plan_file} (Plan requirements)
+           - {phase_dir}/{plan_id}-SUMMARY.md (What was built)
+           - {modified_files from SUMMARY.md} (Changed code to review)
+           </files_to_read>
+
+           <verification_focus>
+           As ${SPECIALIST}, focus on: ${FOCUS_AREA}
+           </verification_focus>
+
+           Return structured result:
+           - status: PASS/FAIL/WARNING
+           - issues: list of problems found (if any)
+           - suggestions: improvements (non-blocking)
+         "
+       ))
+
+       # Parse result status
+       VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)
+       VERIFICATION_ISSUES=$(echo "$VERIFICATION_RESULT" | sed -n '/issues:/,/suggestions:/p' | grep "^- " | sed 's/^- //')
+       VERIFICATION_SUGGESTIONS=$(echo "$VERIFICATION_RESULT" | sed -n '/suggestions:/,$p' | grep "^- " | sed 's/^- //')
+
+       # Handle failures
+       if [ "$VERIFICATION_STATUS" = "FAIL" ]; then
+         VERIFICATION_PASSED=false
+         AGGREGATED_ISSUES="${AGGREGATED_ISSUES}## ${SPECIALIST}:
+${VERIFICATION_ISSUES}
+
+"
+
+         # For Tier 3, stop on first failure
+         if [ "$TIER" = "3" ]; then
+           echo "Tier 3 verification failed at ${SPECIALIST}, stopping chain"
+           break
+         fi
+       elif [ "$VERIFICATION_STATUS" = "WARNING" ]; then
+         # Accumulate warnings but don't fail
+         AGGREGATED_ISSUES="${AGGREGATED_ISSUES}## ${SPECIALIST} (warning):
+${VERIFICATION_ISSUES}
+
+"
+       fi
+
+       # Accumulate suggestions
+       if [ -n "$VERIFICATION_SUGGESTIONS" ]; then
+         AGGREGATED_SUGGESTIONS="${AGGREGATED_SUGGESTIONS}## ${SPECIALIST}:
+${VERIFICATION_SUGGESTIONS}
+
+"
+       fi
+     done
+   fi
 
      # Log verification results to SUMMARY.md
      cat >> {phase_dir}/{plan_id}-SUMMARY.md << EOF

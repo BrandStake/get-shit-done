@@ -240,6 +240,54 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      fi
    }
 
+   # Timeout wrapper for specialist execution
+   handle_specialist_timeout() {
+     local TASK_COMMAND="$1"
+     local PHASE="$2"
+     local PLAN="$3"
+     local TIMEOUT="${SPECIALIST_TIMEOUT:-300}"  # 5 minutes default
+
+     # Run with timeout and signal escalation
+     timeout --kill-after=10s ${TIMEOUT}s bash -c "$TASK_COMMAND"
+     local EXIT_CODE=$?
+
+     # Handle exit codes
+     case $EXIT_CODE in
+       0)
+         # Success
+         return 0
+         ;;
+       124)
+         # SIGTERM timeout
+         echo "ERROR: Specialist timed out after ${TIMEOUT}s (SIGTERM)" >&2
+         node ~/.claude/get-shit-done/bin/gsd-tools.cjs log-specialist-error \
+           --phase "$PHASE" \
+           --plan "$PLAN" \
+           --task "specialist-execution" \
+           --specialist "timeout" \
+           --error-type "timeout" \
+           --details "Specialist exceeded ${TIMEOUT}s timeout (SIGTERM)"
+         return 124
+         ;;
+       137)
+         # SIGKILL timeout
+         echo "ERROR: Specialist killed after timeout (SIGKILL)" >&2
+         node ~/.claude/get-shit-done/bin/gsd-tools.cjs log-specialist-error \
+           --phase "$PHASE" \
+           --plan "$PLAN" \
+           --task "specialist-execution" \
+           --specialist "timeout" \
+           --error-type "timeout-kill" \
+           --details "Specialist killed with SIGKILL after ignoring SIGTERM"
+         return 137
+         ;;
+       *)
+         # Other command failure
+         return $EXIT_CODE
+         ;;
+     esac
+   }
+
    parse_specialist_result() {
      local RESULT="$1"
      local TASK_NUM="$2"

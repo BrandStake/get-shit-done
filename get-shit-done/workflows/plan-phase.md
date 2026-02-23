@@ -20,6 +20,18 @@ INIT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs init plan-phase "$PHASE")
 
 Parse JSON for: `researcher_model`, `planner_model`, `checker_model`, `research_enabled`, `plan_checker_enabled`, `nyquist_validation_enabled`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`, `has_research`, `has_context`, `has_plans`, `plan_count`, `planning_exists`, `roadmap_exists`.
 
+**Generate agent roster for planner context:**
+
+```bash
+# Generate fresh agent roster for planner context
+GSD_TOOLS="${HOME}/.claude/get-shit-done/bin/gsd-tools.cjs"
+node "${GSD_TOOLS}" agents enumerate --output .planning/available_agents.md
+```
+
+**Error handling:**
+- If `agents enumerate` fails, log warning but continue (planner works without specialists)
+- If available_agents.md empty, planner assigns specialist: null to all tasks
+
 **File paths (for <files_to_read> blocks):** `state_path`, `roadmap_path`, `requirements_path`, `context_path`, `research_path`, `verification_path`, `uat_path`. These are null if files don't exist.
 
 **If `planning_exists` is false:** Error — run `/gsd:new-project` first.
@@ -199,6 +211,7 @@ Planner prompt:
 - {requirements_path} (Requirements)
 - {context_path} (USER DECISIONS from /gsd:discuss-phase)
 - {research_path} (Technical Research)
+- .planning/available_agents.md (Available Specialists)
 - {verification_path} (Verification Gaps - if --gaps)
 - {uat_path} (UAT Gaps - if --gaps)
 </files_to_read>
@@ -212,9 +225,14 @@ Planner prompt:
 <downstream_consumer>
 Output consumed by /gsd:execute-phase. Plans need:
 - Frontmatter (wave, depends_on, files_modified, autonomous)
-- Tasks in XML format
+- Tasks in XML format with specialist assignments
 - Verification criteria
 - must_haves for goal-backward verification
+
+**Specialist assignment:**
+Tasks should include 'specialist' field in frontmatter based on domain detection.
+Tasks without domain match get 'specialist: null' for direct gsd-executor execution.
+Validate specialist exists in available_agents.md before assignment.
 </downstream_consumer>
 
 <quality_gate>

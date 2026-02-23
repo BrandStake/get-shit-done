@@ -102,29 +102,69 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    - Bad: "Executing terrain generation plan"
    - Good: "Procedural terrain generator using Perlin noise — creates height maps, biome zones, and collision meshes. Required before vehicle physics can interact with ground."
 
-2. **Validate specialist availability and spawn executor agents:**
+2. **Parse task-level specialist assignments and spawn executor agents:**
 
-   **Before spawning, validate specialist if task has specialist field:**
+   **Parse all specialist fields from plan tasks:**
 
-   Read task frontmatter from plan file to check for specialist assignment:
+   Extract specialist assignments for all tasks in the plan file:
    ```bash
-   # Extract specialist field from task frontmatter
-   SPECIALIST=$(grep -A 10 "^<task" {plan_file} | grep "^specialist:" | head -n 1 | sed 's/specialist:\s*//' | xargs)
+   # Parse specialist assignments for all tasks in the plan
+   # Build SPECIALISTS array indexed by task number
+   declare -A SPECIALISTS
+   TASK_NUM=0
+   IN_TASK=false
+   CURRENT_SPECIALIST=""
 
-   # If specialist assigned, validate availability
-   if [ -n "$SPECIALIST" ] && [ "$SPECIALIST" != "gsd-executor" ]; then
+   while IFS= read -r line; do
+     # Check if entering a task block
+     if [[ "$line" =~ ^\<task ]]; then
+       TASK_NUM=$((TASK_NUM + 1))
+       IN_TASK=true
+       CURRENT_SPECIALIST="gsd-executor"  # Default
+     fi
+
+     # If inside a task, look for specialist field
+     if [[ "$IN_TASK" == "true" ]] && [[ "$line" =~ ^specialist: ]]; then
+       CURRENT_SPECIALIST=$(echo "$line" | sed 's/^specialist:\s*//' | xargs)
+       # Handle "null" value
+       if [[ "$CURRENT_SPECIALIST" == "null" ]]; then
+         CURRENT_SPECIALIST="gsd-executor"
+       fi
+     fi
+
+     # Check if exiting a task block
+     if [[ "$line" =~ ^\</task\> ]]; then
+       SPECIALISTS[$TASK_NUM]="$CURRENT_SPECIALIST"
+       IN_TASK=false
+     fi
+   done < "{plan_file}"
+
+   echo "Parsed ${#SPECIALISTS[@]} specialist assignments from plan"
+   ```
+
+   **Validate specialist availability and spawn executor agents:**
+
+   For each plan (or task if spawning individually):
+   ```bash
+   # Get specialist for current task/plan
+   CURRENT_SPECIALIST="${SPECIALISTS[$TASK_NUM]:-gsd-executor}"
+
+   # Validate specialist availability
+   if [ -n "$CURRENT_SPECIALIST" ] && [ "$CURRENT_SPECIALIST" != "gsd-executor" ]; then
      # Check if specialist exists in available_agents.md
      if [ ! -f .planning/available_agents.md ]; then
        echo "Warning: available_agents.md missing, falling back to gsd-executor" >&2
-       SPECIALIST="gsd-executor"
-     elif ! grep -q "^- \*\*${SPECIALIST}\*\*:" .planning/available_agents.md; then
-       echo "Warning: Specialist '${SPECIALIST}' not available, falling back to gsd-executor" >&2
-       SPECIALIST="gsd-executor"
+       CURRENT_SPECIALIST="gsd-executor"
+     elif ! grep -q "^- \*\*${CURRENT_SPECIALIST}\*\*:" .planning/available_agents.md; then
+       echo "Warning: Specialist '${CURRENT_SPECIALIST}' not available, falling back to gsd-executor" >&2
+       CURRENT_SPECIALIST="gsd-executor"
      fi
    else
      # No specialist assigned or already gsd-executor
-     SPECIALIST="gsd-executor"
+     CURRENT_SPECIALIST="gsd-executor"
    fi
+
+   echo "Spawning ${CURRENT_SPECIALIST} for plan {plan_id}..."
    ```
 
    **Spawn with validated specialist:**
@@ -134,11 +174,12 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
 
    ```
    Task(
-     subagent_type="${SPECIALIST}",
+     subagent_type="${CURRENT_SPECIALIST}",
      model="{executor_model}",
      prompt="
        <objective>
        Execute plan {plan_number} of phase {phase_number}-{phase_name}.
+       Specialist: ${CURRENT_SPECIALIST}
        Commit each task atomically. Create SUMMARY.md. Update STATE.md and ROADMAP.md.
        </objective>
 
@@ -157,6 +198,11 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        - ./CLAUDE.md (Project instructions, if exists — follow project-specific guidelines and coding conventions)
        - .agents/skills/ (Project skills, if exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
        </files_to_read>
+
+       <task_focus>
+       {If spawning for specific task: "Execute only task {TASK_NUM}, not the entire plan"}
+       {If spawning for entire plan: "Execute all tasks in the plan"}
+       </task_focus>
 
        <success_criteria>
        - [ ] All tasks executed

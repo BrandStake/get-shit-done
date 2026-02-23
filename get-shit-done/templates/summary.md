@@ -38,6 +38,10 @@ patterns-established:
   - "Pattern 1: description"
   - "Pattern 2: description"
 
+specialist_usage:
+  gsd-executor: [1, 2, 3]  # Task numbers executed by each specialist
+  python-pro: [4]           # Example: specialist executed specific tasks
+
 requirements-completed: []  # REQUIRED — Copy ALL requirement IDs from this plan's `requirements` frontmatter field.
 
 # Metrics

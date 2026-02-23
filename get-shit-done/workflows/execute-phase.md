@@ -397,6 +397,27 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        ${SPECIALIST_USAGE_YAML}
        </specialist_metadata>
 
+       <commit_attribution>
+       When committing task work, include specialist co-authorship:
+
+       git commit -m \"\$(cat <<'EOF'
+       feat(\${PHASE}-\${PLAN}): [task description]
+
+       [Implementation details]
+
+       Co-Authored-By: \${CURRENT_SPECIALIST} <\${CURRENT_SPECIALIST}@voltagent>
+       EOF
+       )\"
+
+       For gsd-executor (default specialist):
+       Co-Authored-By: gsd-executor <gsd@claude.team>
+
+       For other specialists:
+       Co-Authored-By: [specialist-name] <[specialist-name]@voltagent>
+
+       This ensures GitHub/GitLab display co-authorship in their UIs.
+       </commit_attribution>
+
        <task_focus>
        {If spawning for specific task: "Execute only task {TASK_NUM}, not the entire plan"}
        {If spawning for entire plan: "Execute all tasks in the plan"}

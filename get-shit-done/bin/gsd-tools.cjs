@@ -570,6 +570,24 @@ async function main() {
       break;
     }
 
+    case 'log-specialist-error': {
+      const phaseIdx = args.indexOf('--phase');
+      const planIdx = args.indexOf('--plan');
+      const taskIdx = args.indexOf('--task');
+      const specialistIdx = args.indexOf('--specialist');
+      const errorTypeIdx = args.indexOf('--error-type');
+      const detailsIdx = args.indexOf('--details');
+      commands.cmdLogSpecialistError(cwd, {
+        phase: phaseIdx !== -1 ? args[phaseIdx + 1] : null,
+        plan: planIdx !== -1 ? args[planIdx + 1] : null,
+        task: taskIdx !== -1 ? args[taskIdx + 1] : null,
+        specialist: specialistIdx !== -1 ? args[specialistIdx + 1] : null,
+        errorType: errorTypeIdx !== -1 ? args[errorTypeIdx + 1] : null,
+        details: detailsIdx !== -1 ? args[detailsIdx + 1] : null,
+      }, raw);
+      break;
+    }
+
     default:
       error(`Unknown command: ${command}`);
   }

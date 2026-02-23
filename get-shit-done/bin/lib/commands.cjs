@@ -540,6 +540,53 @@ function cmdScaffold(cwd, type, options, raw) {
   output({ created: true, path: relPath }, raw, relPath);
 }
 
+function cmdLogSpecialistError(cwd, options, raw) {
+  const { phase, plan, task, specialist, errorType, details } = options;
+
+  // Validate required parameters
+  if (!phase || !plan || !task || !specialist || !errorType || !details) {
+    error('Missing required parameters. Required: --phase, --plan, --task, --specialist, --error-type, --details');
+  }
+
+  // Create error log entry
+  const timestamp = new Date().toISOString();
+  const errorEntry = {
+    phase,
+    plan,
+    task,
+    specialist,
+    error_type: errorType,
+    details,
+    timestamp,
+  };
+
+  // Ensure .planning directory exists
+  const planningDir = path.join(cwd, '.planning');
+  if (!fs.existsSync(planningDir)) {
+    error('.planning directory not found');
+  }
+
+  // Append to specialist-errors.jsonl
+  const errorLogPath = path.join(planningDir, 'specialist-errors.jsonl');
+  const logLine = JSON.stringify(errorEntry) + '\n';
+  fs.appendFileSync(errorLogPath, logLine, 'utf-8');
+
+  // Also log to STATE.md as a blocker for visibility
+  const { cmdStateAddBlocker } = require('./state.cjs');
+  const errorSummary = `[${phase}-${plan}] ${errorType}: ${specialist} failed on task ${task} - ${details}`;
+  try {
+    cmdStateAddBlocker(cwd, errorSummary, true); // raw=true to suppress output
+  } catch (e) {
+    // Non-critical if STATE.md update fails, error is still logged to JSONL
+  }
+
+  output({
+    logged: true,
+    file: 'specialist-errors.jsonl',
+    entry: errorEntry,
+  }, raw, 'logged');
+}
+
 module.exports = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
@@ -553,4 +600,5 @@ module.exports = {
   cmdProgressRender,
   cmdTodoComplete,
   cmdScaffold,
+  cmdLogSpecialistError,
 };

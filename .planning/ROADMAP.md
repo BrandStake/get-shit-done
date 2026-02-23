@@ -57,6 +57,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Milestone Goal:** Fix specialist delegation by having orchestrator spawn specialists based on planner assignments.
 
 - [ ] **Phase 7: Infrastructure** - Agent enumeration and planning integration
+- [ ] **Phase 07.1: VoltAgent Verification Teams** - (INSERTED)
 - [ ] **Phase 8: Orchestrator Spawning** - Specialist spawning with context injection
 - [ ] **Phase 9: Result Handling** - Result parsing and state management
 - [ ] **Phase 10: Error Recovery & Cleanup** - Graceful fallback and cleanup
@@ -76,8 +77,24 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Agent enumeration in gsd-tools and orchestrator validation
-- [ ] 07-02-PLAN.md — Planning integration with specialist assignment
+- [x] 07-01-PLAN.md — Agent enumeration in gsd-tools and orchestrator validation
+- [x] 07-02-PLAN.md — Planning integration with specialist assignment
+
+### Phase 07.1: VoltAgent Verification Teams (INSERTED)
+**Goal**: Implement multi-specialist verification teams for validating task output
+**Depends on**: Phase 7
+**Requirements**: VT-01, VT-02, VT-03, VT-04, VT-05, VT-06, VT-07, VT-08, VT-09, VT-10, VT-11
+**Success Criteria** (what must be TRUE):
+  1. Execute-phase orchestrator spawns verification specialists after task completion
+  2. Verification tier determines which specialists review (Tier 1/2/3)
+  3. Sequential verification chain for Tier 3 critical tasks
+  4. Verification results determine go/no-go for task completion
+  5. Verification is configurable and supports graceful degradation
+**Plans**: 2 plans
+
+Plans:
+- [ ] 07.1-01-PLAN.md — Core verification infrastructure and single-specialist support
+- [ ] 07.1-02-PLAN.md — Multi-specialist teams and configuration options
 
 ### Phase 8: Orchestrator Spawning (Specialist Spawning & Context Passing)
 **Goal**: Orchestrator spawns specialists with proper context injection
@@ -129,11 +146,12 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 7 → 8 → 9 → 10
+Phases execute in numeric order: 7 → 07.1 → 8 → 9 → 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Infrastructure | 1/2 | In Progress|  |
+| 7. Infrastructure | 2/2 | Complete | 2026-02-23 |
+| 07.1. VoltAgent Verification Teams | 0/2 | Not started | - |
 | 8. Orchestrator Spawning | 0/TBD | Not started | - |
 | 9. Result Handling | 0/TBD | Not started | - |
 | 10. Error Recovery & Cleanup | 0/TBD | Not started | - |

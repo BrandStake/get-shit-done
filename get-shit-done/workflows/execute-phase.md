@@ -185,7 +185,82 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
 
    If ANY spot-check fails: report which plan failed, route to failure handler — ask "Retry plan?" or "Continue with remaining waves?"
 
-   If pass:
+   If pass, proceed to verification (if tier > 0):
+
+   **Verification (if tier > 0):**
+
+   After each task completes successfully, determine verification needs:
+
+   ```bash
+   # Extract task description and modified files from SUMMARY.md
+   TASK_DESC=$(grep -A 2 "## What Was Built" {phase_dir}/{plan_id}-SUMMARY.md | tail -n 1)
+   MODIFIED_FILES=$(grep -A 10 "key-files:" {phase_dir}/{plan_id}-SUMMARY.md | grep "  - " | sed 's/  - //' | tr '\n' ' ')
+
+   # Determine verification tier
+   TIER_INFO=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs determine-verification-tier "$TASK_DESC" "$MODIFIED_FILES" --check-available --raw)
+   TIER=$(echo "$TIER_INFO" | jq -r '.tier')
+   SPECIALISTS=$(echo "$TIER_INFO" | jq -r '.specialists[]' | head -n 1)
+
+   # If tier > 0, spawn verification specialist
+   if [ "$TIER" -gt "0" ] && [ -n "$SPECIALISTS" ]; then
+     echo "Spawning verification specialist: $SPECIALISTS (Tier $TIER)"
+
+     VERIFICATION_RESULT=$(Task(
+       subagent_type="$SPECIALISTS",
+       model="{verifier_model}",
+       prompt="
+         <objective>
+         Review the implementation from plan {plan_id} of phase {phase_number}.
+         Verify code quality, security, patterns, and completeness.
+         </objective>
+
+         <files_to_read>
+         - {phase_dir}/{plan_file} (Plan requirements)
+         - {phase_dir}/{plan_id}-SUMMARY.md (What was built)
+         - {modified_files from SUMMARY.md} (Changed code to review)
+         </files_to_read>
+
+         <verification_focus>
+         Based on Tier $TIER, focus on:
+         - Tier 1: Code quality, patterns, obvious issues
+         - Tier 2: + Test coverage, edge cases, error handling
+         - Tier 3: + Security, performance, production readiness
+         </verification_focus>
+
+         Return structured result:
+         - status: PASS/FAIL/WARNING
+         - issues: list of problems found (if any)
+         - suggestions: improvements (non-blocking)
+       "
+     ))
+
+     # Parse verification result
+     VERIFICATION_STATUS=$(echo "$VERIFICATION_RESULT" | grep -o "status: [A-Z]*" | cut -d' ' -f2)
+
+     # Handle verification result
+     if [ "$VERIFICATION_STATUS" = "FAIL" ]; then
+       echo "❌ Verification FAILED for plan {plan_id}"
+       echo "$VERIFICATION_RESULT"
+       # Ask user: "Fix issues or continue?"
+       # If fix: spawn executor to address issues
+       # If continue: log warning and proceed
+     elif [ "$VERIFICATION_STATUS" = "WARNING" ]; then
+       echo "⚠️ Verification passed with warnings for plan {plan_id}"
+       # Log warnings to SUMMARY.md and continue
+     else
+       echo "✓ Verification PASSED for plan {plan_id}"
+     fi
+   else
+     echo "Skipping verification (Tier 0 or no specialists available)"
+   fi
+   ```
+
+   **Graceful degradation:**
+   - If code-reviewer not available, log warning and skip verification
+   - Check available_agents.md before spawning
+   - If specialist spawn fails, log error but don't block plan completion
+
+   After verification (or skip), report completion:
    ```
    ---
    ## Wave {N} Complete
@@ -193,6 +268,7 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    **{Plan ID}: {Plan Name}**
    {What was built — from SUMMARY.md}
    {Notable deviations, if any}
+   {Verification status, if performed}
 
    {If more waves: what this enables for next wave}
    ---

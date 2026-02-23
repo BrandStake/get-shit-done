@@ -199,8 +199,28 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    # Determine verification tier
    TIER_INFO=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs determine-verification-tier "$TASK_DESC" "$MODIFIED_FILES" --check-available --raw)
    TIER=$(echo "$TIER_INFO" | jq -r '.tier')
-   SPECIALISTS=$(echo "$TIER_INFO" | jq -r '.specialists[]' | head -n 1)
    TIER_REASON=$(echo "$TIER_INFO" | jq -r '.reason')
+
+   # Generate specialist list based on tier
+   case $TIER in
+     1) SPECIALIST_LIST="code-reviewer" ;;
+     2) SPECIALIST_LIST="code-reviewer qa-expert" ;;
+     3) SPECIALIST_LIST="code-reviewer qa-expert principal-engineer" ;;
+     *) SPECIALIST_LIST="" ;;
+   esac
+
+   # Check specialist availability against available_agents.md
+   AVAILABLE_SPECIALISTS=""
+   for SPECIALIST in $SPECIALIST_LIST; do
+     if grep -q "^- \*\*${SPECIALIST}\*\*:" .planning/available_agents.md 2>/dev/null; then
+       AVAILABLE_SPECIALISTS="$AVAILABLE_SPECIALISTS $SPECIALIST"
+     else
+       echo "Warning: ${SPECIALIST} not available" >&2
+     fi
+   done
+
+   # Log the verification plan
+   echo "Verification Tier $TIER detected - Specialists: $AVAILABLE_SPECIALISTS"
 
    # Generate verification brief before spawning specialist
    cat > /tmp/verification-brief.md << EOF

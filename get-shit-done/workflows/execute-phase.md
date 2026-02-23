@@ -329,6 +329,17 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    # Count unique specialists for reporting
    UNIQUE_SPECIALISTS=$(printf '%s\n' "${SPECIALISTS[@]}" | sort -u | paste -sd, -)
    echo "Specialists for this plan: $UNIQUE_SPECIALISTS"
+
+   # Build specialist usage map for SUMMARY.md frontmatter
+   declare -A SPECIALIST_TASKS_MAP
+   for TASK_NUM in "${!SPECIALISTS[@]}"; do
+     SPEC="${SPECIALISTS[$TASK_NUM]}"
+     if [ -z "${SPECIALIST_TASKS_MAP[$SPEC]}" ]; then
+       SPECIALIST_TASKS_MAP[$SPEC]="$TASK_NUM"
+     else
+       SPECIALIST_TASKS_MAP[$SPEC]="${SPECIALIST_TASKS_MAP[$SPEC]}, $TASK_NUM"
+     fi
+   done
    ```
 
    **Spawn executor agents with validated specialists:**
@@ -347,6 +358,13 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    This keeps orchestrator context lean (~10-15%).
 
    ```bash
+   # Build specialist_usage YAML for SUMMARY.md frontmatter
+   SPECIALIST_USAGE_YAML="specialist_usage:"
+   for SPEC in "${!SPECIALIST_TASKS_MAP[@]}"; do
+     SPECIALIST_USAGE_YAML="${SPECIALIST_USAGE_YAML}
+      ${SPEC}: [${SPECIALIST_TASKS_MAP[$SPEC]}]"
+   done
+
    # Execute specialist
    SPECIALIST_RESULT=$(Task(
      subagent_type="${CURRENT_SPECIALIST}",
@@ -373,6 +391,11 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
        - ./CLAUDE.md (Project instructions, if exists — follow project-specific guidelines and coding conventions)
        - .agents/skills/ (Project skills, if exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
        </files_to_read>
+
+       <specialist_metadata>
+       Include this in SUMMARY.md frontmatter:
+       ${SPECIALIST_USAGE_YAML}
+       </specialist_metadata>
 
        <task_focus>
        {If spawning for specific task: "Execute only task {TASK_NUM}, not the entire plan"}

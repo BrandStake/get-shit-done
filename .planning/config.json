@@ -1,7 +1,7 @@
 {
   "mode": "interactive",
   "depth": "standard",
-  "model_profile": "balanced",
+  "model_profile": "quality",
   "parallelization": {
     "enabled": true
   },
@@ -24,7 +24,22 @@
       "require_domain_match": true
     }
   },
+  "verification": {
+    "enabled": true,
+    "default_tier": 1,
+    "tier_overrides": {
+      "authentication": 3,
+      "payments": 3,
+      "database": 2
+    },
+    "sequential_for_tier_3": true,
+    "required_specialists": ["code-reviewer"],
+    "optional_specialists": ["qa-expert", "principal-engineer"],
+    "fail_on_missing_required": false,
+    "aggregate_findings": true
+  },
   "git": {
     "branching_strategy": "none"
-  }
+  },
+  "profile": "quality"
 }

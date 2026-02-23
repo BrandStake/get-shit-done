@@ -164,9 +164,22 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      local SPECIALIST="$1"
      local TASK_NUM="$2"
 
+     # Debug logging (if DEBUG=true in environment)
+     if [ "${DEBUG:-false}" = "true" ]; then
+       echo "DEBUG: Task $TASK_NUM specialist validation:" >&2
+       echo "  Input: '$SPECIALIST'" >&2
+     fi
+
      # Tier 1: No specialist assigned (empty/unset)
      if [ -z "$SPECIALIST" ]; then
        echo "Task $TASK_NUM: No specialist assigned, using gsd-executor" >&2
+       echo "gsd-executor"
+       return
+     fi
+
+     # Handle malformed specialist field
+     if [[ "$SPECIALIST" =~ [^a-zA-Z0-9_-] ]]; then
+       echo "Warning: Malformed specialist name '$SPECIALIST', using gsd-executor" >&2
        echo "gsd-executor"
        return
      fi
@@ -192,6 +205,9 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
      fi
 
      # Specialist is valid and available
+     if [ "${DEBUG:-false}" = "true" ]; then
+       echo "DEBUG: Validated specialist: $SPECIALIST" >&2
+     fi
      echo "$SPECIALIST"
    }
    ```
@@ -225,6 +241,12 @@ Execute each wave in sequence. Within a wave: parallel if `PARALLELIZATION=true`
    CURRENT_SPECIALIST="${SPECIALISTS[$TASK_NUM]:-gsd-executor}"
 
    echo "Spawning ${CURRENT_SPECIALIST} for plan {plan_id}..."
+
+   # Note: Spawn failure recovery
+   # After Task() call, check for classifyHandoffIfNeeded error
+   # This is a known Claude Code bug that doesn't indicate actual failure
+   # Spot-check actual outputs instead of relying on error message
+   # See failure_handling section for spot-check protocol
    ```
 
    **Spawn with validated specialist:**

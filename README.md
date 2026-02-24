@@ -760,6 +760,22 @@ These community ports pioneered multi-runtime support:
 
 ---
 
+## Fork Notice
+
+This repository is a fork of the original [Get Shit Done](https://github.com/glittercowboy/get-shit-done) by **TÂCHES** ([@glittercowboy](https://github.com/glittercowboy)).
+
+**What this fork adds:**
+- **Specialist Delegation** — Automatic routing to domain-specific agents (python-pro, docker-expert, typescript-pro, etc.)
+- **Verification Specialists** — Tiered code review with code-reviewer, qa-expert, and principal-engineer
+- **Dynamic Agent Discovery** — Enumerates 129+ specialists from VoltAgent plugins
+- **Agent Teams Integration** — Leverages Claude Code's experimental agent teams feature
+
+All credit for the core GSD architecture, workflow design, and context engineering goes to TÂCHES. This fork extends the execution and verification layers with specialist delegation.
+
+**Original project:** [github.com/glittercowboy/get-shit-done](https://github.com/glittercowboy/get-shit-done)
+
+---
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
@@ -769,5 +785,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 <div align="center">
 
 **Claude Code is powerful. GSD makes it reliable.**
+
+*Original system by TÂCHES. Specialist delegation by this fork.*
 
 </div>

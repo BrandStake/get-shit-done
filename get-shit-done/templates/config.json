@@ -21,7 +21,7 @@
     "min_plans_for_parallel": 2
   },
   "agent_teams": {
-    "enabled": false,
+    "enabled": true,
     "mode": "auto",
     "min_tasks_for_team": 5,
     "min_domains_for_team": 2,

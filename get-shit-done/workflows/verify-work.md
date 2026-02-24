@@ -320,21 +320,47 @@ Present summary:
 All tests passed or skipped. No issues found.
 ```
 
-**Step 2.** Check if specialist verification is enabled - run this command:
+**Step 2.** Check config and get verification tier - run this command:
 ```bash
-node -e "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('.planning/config.json','utf8')); console.log(cfg.agent_teams?.enabled ? 'SPECIALISTS_ENABLED' : 'SPECIALISTS_DISABLED')"
+node -e "
+const fs=require('fs');
+const cfg=JSON.parse(fs.readFileSync('.planning/config.json','utf8'));
+const enabled = cfg.agent_teams?.enabled || false;
+console.log('ENABLED=' + enabled);
+console.log('TIER=3');
+"
 ```
 
-**Step 3.** If output contains "SPECIALISTS_ENABLED", you MUST spawn the code-reviewer specialist NOW:
+**Step 3.** If ENABLED=true, spawn specialists based on TIER. Execute ALL applicable Task calls:
+
+**Step 3a.** (Tier 1, 2, 3) Spawn code-reviewer:
 ```
 Task(
   subagent_type="code-reviewer",
   description="Code review phase files",
-  prompt="Review the source files in this project for code quality. Read main.py, database.py, models.py. Focus on: code quality, patterns, bugs. Return a 3-5 line summary of findings."
+  prompt="Review source files for code quality. Focus on: patterns, bugs, maintainability. Return 3-5 line summary."
 )
 ```
 
-**Step 4.** After Task completes (or if SPECIALISTS_DISABLED), display:
+**Step 3b.** (Tier 2, 3 only) Spawn qa-expert:
+```
+Task(
+  subagent_type="qa-expert",
+  description="QA review phase",
+  prompt="Review test coverage and quality. Focus on: edge cases, error handling. Return 3-5 line summary."
+)
+```
+
+**Step 3c.** (Tier 3 only) Spawn principal-engineer:
+```
+Task(
+  subagent_type="principal-engineer",
+  description="Architecture review",
+  prompt="Review architecture and production-readiness. Focus on: scalability, patterns. Return 3-5 line summary."
+)
+```
+
+**Step 4.** After ALL Tasks complete (or if ENABLED=false), display:
 ```
 ---
 Verification Complete

@@ -37,6 +37,15 @@
  *   phase insert <after> <description> Insert decimal phase after existing
  *   phase remove <phase> [--force]     Remove phase, renumber all subsequent
  *   phase complete <phase>             Mark phase done, update state + roadmap
+ *   phase analyze-complexity <phase>   Analyze phase for team vs simple mode
+ *
+ * Agent Teams Operations:
+ *   plan to-team-tasks <plan_path>     Convert plan tasks to team task JSON format
+ *   task detect-domain <description>   Detect domain from task description
+ *     [--raw]                          Return specialist name only
+ *   team aggregate-results             Aggregate team results into SUMMARY.md
+ *     --team <name> --plan <id>
+ *     --output <path>
  *
  * Roadmap Operations:
  *   roadmap get-phase <phase>          Extract phase section from ROADMAP.md
@@ -405,8 +414,49 @@ async function main() {
         phase.cmdPhaseRemove(cwd, args[2], { force: forceFlag }, raw);
       } else if (subcommand === 'complete') {
         phase.cmdPhaseComplete(cwd, args[2], raw);
+      } else if (subcommand === 'analyze-complexity') {
+        phase.cmdPhaseAnalyzeComplexity(cwd, args[2], raw);
       } else {
-        error('Unknown phase subcommand. Available: next-decimal, add, insert, remove, complete');
+        error('Unknown phase subcommand. Available: next-decimal, add, insert, remove, complete, analyze-complexity');
+      }
+      break;
+    }
+
+    case 'plan': {
+      const subcommand = args[1];
+      if (subcommand === 'to-team-tasks') {
+        commands.cmdPlanToTeamTasks(cwd, args[2], raw);
+      } else {
+        error('Unknown plan subcommand. Available: to-team-tasks');
+      }
+      break;
+    }
+
+    case 'task': {
+      const subcommand = args[1];
+      if (subcommand === 'detect-domain') {
+        const domainIdx = args.indexOf('--domain');
+        const description = domainIdx !== -1 ? args[domainIdx + 1] : args.slice(2).join(' ');
+        commands.cmdTaskDetectDomain(description, raw);
+      } else {
+        error('Unknown task subcommand. Available: detect-domain');
+      }
+      break;
+    }
+
+    case 'team': {
+      const subcommand = args[1];
+      if (subcommand === 'aggregate-results') {
+        const teamIdx = args.indexOf('--team');
+        const planIdx = args.indexOf('--plan');
+        const outputIdx = args.indexOf('--output');
+        commands.cmdTeamAggregateResults(cwd, {
+          team: teamIdx !== -1 ? args[teamIdx + 1] : null,
+          plan: planIdx !== -1 ? args[planIdx + 1] : null,
+          output: outputIdx !== -1 ? args[outputIdx + 1] : null,
+        }, raw);
+      } else {
+        error('Unknown team subcommand. Available: aggregate-results');
       }
       break;
     }

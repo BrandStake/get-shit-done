@@ -861,6 +861,121 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
   output(result, raw);
 }
 
+/**
+ * Analyze phase complexity for agent teams mode decision
+ * Returns: { mode, task_count, domains, has_parallel_waves, reasons }
+ */
+function cmdPhaseAnalyzeComplexity(cwd, phaseNum, raw) {
+  const phaseInfo = findPhaseInternal(cwd, phaseNum);
+  if (!phaseInfo.found) {
+    error(`Phase ${phaseNum} not found`);
+    return;
+  }
+
+  const phaseDir = phaseInfo.directory;
+  const planFiles = fs.readdirSync(phaseDir)
+    .filter(f => f.endsWith('-PLAN.md'))
+    .map(f => path.join(phaseDir, f));
+
+  let totalTasks = 0;
+  const domainSet = new Set();
+  let hasParallelWaves = false;
+  const reasons = [];
+  let maxWave = 0;
+
+  // Domain detection patterns (simplified)
+  const domainPatterns = {
+    'python': /python|django|fastapi|pytest|\.py/i,
+    'typescript': /typescript|tsx?|react|next\.?js|angular|vue/i,
+    'golang': /golang|\.go/i,
+    'rust': /rust|cargo|\.rs/i,
+    'database': /postgres|mysql|sql|migration|schema/i,
+    'docker': /docker|container|compose/i,
+    'kubernetes': /kubernetes|k8s|helm|deployment/i,
+    'terraform': /terraform|\.tf/i,
+    'security': /security|auth|oauth|jwt/i,
+    'testing': /test|qa|cypress|playwright/i,
+  };
+
+  for (const planPath of planFiles) {
+    try {
+      const content = fs.readFileSync(planPath, 'utf-8');
+      const fm = extractFrontmatter(content);
+
+      // Count tasks
+      const taskMatches = content.match(/<task[^>]*>/gi) || [];
+      totalTasks += taskMatches.length;
+
+      // Check wave for parallel detection
+      if (fm.wave) {
+        const waveNum = parseInt(fm.wave, 10);
+        if (waveNum > maxWave) maxWave = waveNum;
+      }
+
+      // Detect domains from content
+      for (const [domain, pattern] of Object.entries(domainPatterns)) {
+        if (pattern.test(content)) {
+          domainSet.add(domain);
+        }
+      }
+    } catch (e) {
+      // Skip files that can't be read
+    }
+  }
+
+  // Determine if has parallel waves (multiple plans in same wave)
+  if (maxWave > 1) {
+    hasParallelWaves = true;
+    reasons.push(`Multiple waves detected (max wave: ${maxWave})`);
+  }
+
+  // Build result
+  const domains = Array.from(domainSet);
+  let mode = 'simple';
+
+  // Load config thresholds
+  const configPath = path.join(cwd, '.planning', 'config.json');
+  let minTasks = 5;
+  let minDomains = 2;
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      minTasks = config.agent_teams?.min_tasks_for_team || 5;
+      minDomains = config.agent_teams?.min_domains_for_team || 2;
+    } catch (e) {
+      // Use defaults
+    }
+  }
+
+  // Determine mode
+  if (totalTasks >= minTasks) {
+    mode = 'team';
+    reasons.push(`task_count (${totalTasks}) >= min_tasks_for_team (${minTasks})`);
+  }
+
+  if (domains.length >= minDomains) {
+    mode = 'team';
+    reasons.push(`unique_domains (${domains.length}) >= min_domains_for_team (${minDomains})`);
+  }
+
+  if (mode === 'simple' && reasons.length === 0) {
+    reasons.push(`complexity below thresholds (tasks=${totalTasks}, domains=${domains.length})`);
+  }
+
+  const result = {
+    mode,
+    task_count: totalTasks,
+    domains,
+    has_parallel_waves: hasParallelWaves,
+    max_wave: maxWave,
+    plan_count: planFiles.length,
+    reasons,
+  };
+
+  output(result, raw, mode);
+}
+
 module.exports = {
   cmdPhasesList,
   cmdPhaseNextDecimal,
@@ -870,4 +985,5 @@ module.exports = {
   cmdPhaseInsert,
   cmdPhaseRemove,
   cmdPhaseComplete,
+  cmdPhaseAnalyzeComplexity,
 };

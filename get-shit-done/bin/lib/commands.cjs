@@ -587,6 +587,274 @@ function cmdLogSpecialistError(cwd, options, raw) {
   }, raw, 'logged');
 }
 
+// ─── Agent Teams Commands ──────────────────────────────────────────────────────
+
+/**
+ * Convert plan tasks to team task JSON format for agent teams
+ */
+function cmdPlanToTeamTasks(cwd, planPath, raw) {
+  const fullPath = path.isAbsolute(planPath) ? planPath : path.join(cwd, planPath);
+
+  if (!fs.existsSync(fullPath)) {
+    error(`Plan file not found: ${planPath}`);
+  }
+
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  const { extractFrontmatter } = require('./frontmatter.cjs');
+  const fm = extractFrontmatter(content);
+
+  // Extract tasks using regex
+  const taskRegex = /<task\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/task>/gi;
+  const tasks = [];
+  let match;
+  let taskNum = 1;
+
+  // Domain detection patterns
+  const domainPatterns = {
+    'python': /python|django|fastapi|pytest|\.py/i,
+    'typescript': /typescript|tsx?|react|next\.?js/i,
+    'golang': /golang|\.go/i,
+    'rust': /rust|cargo|\.rs/i,
+    'database': /postgres|mysql|sql|migration/i,
+    'docker': /docker|container|compose/i,
+    'kubernetes': /kubernetes|k8s|helm/i,
+    'terraform': /terraform|\.tf/i,
+    'security': /security|auth|oauth|jwt/i,
+    'testing': /test|qa|cypress|playwright/i,
+  };
+
+  while ((match = taskRegex.exec(content)) !== null) {
+    const taskName = match[1];
+    const taskContent = match[2];
+
+    // Extract action
+    const actionMatch = taskContent.match(/<action>([\s\S]*?)<\/action>/i);
+    const action = actionMatch ? actionMatch[1].trim() : '';
+
+    // Extract files
+    const filesMatch = taskContent.match(/<files>([\s\S]*?)<\/files>/i);
+    const files = filesMatch ? filesMatch[1].trim().split('\n').map(f => f.trim()).filter(f => f) : [];
+
+    // Extract verify
+    const verifyMatch = taskContent.match(/<verify>([\s\S]*?)<\/verify>/i);
+    const verify = verifyMatch ? verifyMatch[1].trim() : '';
+
+    // Extract done
+    const doneMatch = taskContent.match(/<done>([\s\S]*?)<\/done>/i);
+    const done = doneMatch ? doneMatch[1].trim() : '';
+
+    // Detect domain from task content
+    let domain = 'general';
+    const fullText = `${taskName} ${action} ${files.join(' ')}`;
+    for (const [d, pattern] of Object.entries(domainPatterns)) {
+      if (pattern.test(fullText)) {
+        domain = d;
+        break;
+      }
+    }
+
+    const planId = fm.phase && fm.plan ? `${fm.phase}-${String(fm.plan).padStart(2, '0')}` : path.basename(planPath, '-PLAN.md');
+
+    tasks.push({
+      plan_id: planId,
+      task_num: taskNum,
+      name: taskName,
+      description: action,
+      files,
+      verify,
+      done,
+      domain,
+      depends_on: [], // Could be enhanced to parse dependencies
+    });
+
+    taskNum++;
+  }
+
+  output(tasks, raw, JSON.stringify(tasks, null, 2));
+}
+
+/**
+ * Detect domain from task description and return specialist
+ */
+function cmdTaskDetectDomain(description, raw) {
+  if (!description) {
+    output({ specialist: '', domain: '', confidence: 0, keywords: [] }, raw, '');
+    return;
+  }
+
+  const descLower = description.toLowerCase();
+
+  // Specialist mappings (domain -> voltagent specialist)
+  const specialistMap = {
+    'python': 'voltagent-lang:python-pro',
+    'typescript': 'voltagent-lang:typescript-pro',
+    'javascript': 'voltagent-lang:javascript-pro',
+    'golang': 'voltagent-lang:golang-pro',
+    'rust': 'voltagent-lang:rust-engineer',
+    'java': 'voltagent-lang:java-architect',
+    'csharp': 'voltagent-lang:csharp-developer',
+    'ruby': 'voltagent-lang:rails-expert',
+    'php': 'voltagent-lang:php-pro',
+    'swift': 'voltagent-lang:swift-expert',
+    'react': 'voltagent-lang:react-specialist',
+    'vue': 'voltagent-lang:vue-expert',
+    'angular': 'voltagent-lang:angular-architect',
+    'nextjs': 'voltagent-lang:nextjs-developer',
+    'kubernetes': 'voltagent-infra:kubernetes-specialist',
+    'docker': 'voltagent-infra:docker-expert',
+    'terraform': 'voltagent-infra:terraform-engineer',
+    'devops': 'voltagent-infra:devops-engineer',
+    'security': 'voltagent-infra:security-engineer',
+    'postgres': 'voltagent-data-ai:postgres-pro',
+    'database': 'voltagent-data-ai:database-optimizer',
+    'ml': 'voltagent-data-ai:ml-engineer',
+    'testing': 'voltagent-qa-sec:qa-expert',
+    'api': 'voltagent-core-dev:api-designer',
+    'backend': 'voltagent-core-dev:backend-developer',
+  };
+
+  // Detection patterns with priority
+  const detectionPatterns = [
+    // Specific frameworks (highest priority)
+    { pattern: /django|fastapi/i, domain: 'python', keywords: ['django', 'fastapi'] },
+    { pattern: /next\.?js|nextjs/i, domain: 'nextjs', keywords: ['nextjs'] },
+    { pattern: /react native|flutter/i, domain: 'mobile', keywords: ['react native', 'flutter'] },
+    { pattern: /spring boot/i, domain: 'java', keywords: ['spring boot'] },
+    { pattern: /laravel/i, domain: 'php', keywords: ['laravel'] },
+    { pattern: /rails|ruby on rails/i, domain: 'ruby', keywords: ['rails'] },
+
+    // Languages
+    { pattern: /python|pytest|\.py/i, domain: 'python', keywords: ['python'] },
+    { pattern: /typescript|\.tsx?/i, domain: 'typescript', keywords: ['typescript'] },
+    { pattern: /golang|\.go/i, domain: 'golang', keywords: ['golang'] },
+    { pattern: /rust|cargo|\.rs/i, domain: 'rust', keywords: ['rust'] },
+    { pattern: /java|maven|gradle/i, domain: 'java', keywords: ['java'] },
+    { pattern: /c#|csharp|\.net/i, domain: 'csharp', keywords: ['csharp'] },
+    { pattern: /javascript|node\.?js/i, domain: 'javascript', keywords: ['javascript'] },
+    { pattern: /php|composer/i, domain: 'php', keywords: ['php'] },
+    { pattern: /swift|ios|swiftui/i, domain: 'swift', keywords: ['swift'] },
+
+    // Infrastructure
+    { pattern: /kubernetes|k8s|helm/i, domain: 'kubernetes', keywords: ['kubernetes'] },
+    { pattern: /docker|container|compose/i, domain: 'docker', keywords: ['docker'] },
+    { pattern: /terraform|\.tf/i, domain: 'terraform', keywords: ['terraform'] },
+    { pattern: /ci\/cd|pipeline|github actions/i, domain: 'devops', keywords: ['cicd'] },
+
+    // Data
+    { pattern: /postgres(ql)?|psql/i, domain: 'postgres', keywords: ['postgres'] },
+    { pattern: /mysql|database|migration/i, domain: 'database', keywords: ['database'] },
+    { pattern: /machine learning|ml model/i, domain: 'ml', keywords: ['ml'] },
+
+    // Security
+    { pattern: /security|auth|oauth|jwt/i, domain: 'security', keywords: ['security'] },
+
+    // Frontend
+    { pattern: /react|jsx|hooks/i, domain: 'react', keywords: ['react'] },
+    { pattern: /vue|vuex|nuxt/i, domain: 'vue', keywords: ['vue'] },
+    { pattern: /angular|rxjs/i, domain: 'angular', keywords: ['angular'] },
+
+    // Testing
+    { pattern: /testing|test|qa/i, domain: 'testing', keywords: ['testing'] },
+
+    // Backend
+    { pattern: /api|rest|graphql/i, domain: 'api', keywords: ['api'] },
+    { pattern: /backend|server/i, domain: 'backend', keywords: ['backend'] },
+  ];
+
+  let detectedDomain = '';
+  let matchedKeywords = [];
+  let confidence = 0;
+
+  for (const { pattern, domain, keywords } of detectionPatterns) {
+    if (pattern.test(descLower)) {
+      detectedDomain = domain;
+      matchedKeywords = keywords;
+      confidence = 0.85;
+      break;
+    }
+  }
+
+  const specialist = specialistMap[detectedDomain] || '';
+
+  output({
+    specialist,
+    domain: detectedDomain,
+    confidence,
+    keywords: matchedKeywords,
+  }, raw, specialist);
+}
+
+/**
+ * Aggregate team results into SUMMARY.md format
+ * Note: This creates a placeholder - actual team task data comes from Claude's team tools
+ */
+function cmdTeamAggregateResults(cwd, options, raw) {
+  const { team, plan, output: outputPath } = options;
+
+  if (!team || !plan || !outputPath) {
+    error('Missing required parameters: --team, --plan, --output');
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const fullOutputPath = path.isAbsolute(outputPath) ? outputPath : path.join(cwd, outputPath);
+
+  // Create SUMMARY.md template that will be populated by orchestrator
+  const summaryTemplate = `---
+plan: "${plan}"
+team: "${team}"
+created: ${today}
+status: pending_aggregation
+execution_mode: team
+---
+
+# Plan ${plan} — Execution Summary (Team Mode)
+
+## Team Execution
+
+**Team Name:** ${team}
+**Execution Mode:** Agent Teams
+
+## Task Results
+
+<!-- TEAM_RESULTS_PLACEHOLDER - Orchestrator populates this from TaskList -->
+
+| Task | Specialist | Status | Duration | Commit |
+|------|-----------|--------|----------|--------|
+
+## Files Modified
+
+<!-- TEAM_FILES_PLACEHOLDER - Aggregated from task results -->
+
+## Commits
+
+<!-- TEAM_COMMITS_PLACEHOLDER - Collected commit hashes -->
+
+## Deviations
+
+<!-- TEAM_DEVIATIONS_PLACEHOLDER -->
+
+## Next Steps
+
+_Pending aggregation from team task list_
+`;
+
+  // Ensure output directory exists
+  const outputDir = path.dirname(fullOutputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  fs.writeFileSync(fullOutputPath, summaryTemplate, 'utf-8');
+
+  output({
+    created: true,
+    path: fullOutputPath,
+    team,
+    plan,
+    note: 'Template created - orchestrator populates from TeamList results',
+  }, raw, fullOutputPath);
+}
+
 module.exports = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
@@ -601,4 +869,7 @@ module.exports = {
   cmdTodoComplete,
   cmdScaffold,
   cmdLogSpecialistError,
+  cmdPlanToTeamTasks,
+  cmdTaskDetectDomain,
+  cmdTeamAggregateResults,
 };

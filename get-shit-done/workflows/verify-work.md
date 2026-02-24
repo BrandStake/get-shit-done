@@ -322,6 +322,179 @@ All tests passed. Ready to continue.
 ```
 </step>
 
+<step name="specialist_verification" conditional="agent_teams.enabled == true">
+**Spawn verification specialists via Agent Teams:**
+
+After automated UAT completes, optionally spawn expert verification specialists to review the implementation quality.
+
+**Prerequisites:** Agent teams feature enabled in config (`agent_teams.enabled: true`).
+
+**1. Determine verification tier from plans:**
+
+```bash
+# Read verification tier from plan frontmatter
+VERIFICATION_TIER=$(grep -h "^tier:" "$PHASE_DIR"/*-PLAN.md 2>/dev/null | head -1 | cut -d: -f2 | tr -d ' ' || echo "1")
+
+# Load tier overrides from config
+TIER_CONFIG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get verification.tier_overrides 2>/dev/null || echo "{}")
+```
+
+**2. Map tier to verification specialists:**
+
+| Tier | Specialists | Focus Areas |
+|------|-------------|-------------|
+| 1 | code-reviewer | Code quality, patterns |
+| 2 | code-reviewer, qa-expert | + Test coverage, edge cases |
+| 3 | code-reviewer, qa-expert, principal-engineer | + Architecture, security, production-readiness |
+
+```bash
+case $VERIFICATION_TIER in
+  1) SPECIALISTS="voltagent-qa-sec:code-reviewer" ;;
+  2) SPECIALISTS="voltagent-qa-sec:code-reviewer voltagent-qa-sec:qa-expert" ;;
+  3) SPECIALISTS="voltagent-qa-sec:code-reviewer voltagent-qa-sec:qa-expert voltagent-core-dev:principal-engineer" ;;
+  *) SPECIALISTS="voltagent-qa-sec:code-reviewer" ;;
+esac
+```
+
+**3. Create verification team:**
+
+```
+TeamCreate(
+  team_name="verify-${PHASE_NUMBER}",
+  description="Specialist verification for phase ${PHASE_NUMBER}"
+)
+```
+
+**4. Spawn verification specialists:**
+
+```bash
+# Get files modified from SUMMARY.md files
+FILES_MODIFIED=$(grep -h "^- " "$PHASE_DIR"/*-SUMMARY.md | grep -E "\.(ts|js|py|go|rs|java)$" | sort -u)
+
+for SPECIALIST in $SPECIALISTS; do
+  SPECIALIST_NAME=$(echo "$SPECIALIST" | cut -d: -f2)
+
+  # Define focus area per specialist
+  case $SPECIALIST_NAME in
+    code-reviewer) FOCUS="Code quality, design patterns, security vulnerabilities, maintainability" ;;
+    qa-expert) FOCUS="Test coverage, edge cases, error handling, integration points" ;;
+    principal-engineer) FOCUS="Architecture alignment, scalability, production readiness, technical debt" ;;
+    *) FOCUS="General code review" ;;
+  esac
+
+  Task(
+    team_name="verify-${PHASE_NUMBER}",
+    name="${SPECIALIST_NAME}",
+    subagent_type="${SPECIALIST}",
+    model="${checker_model}",
+    prompt="
+You are a verification specialist reviewing phase ${PHASE_NUMBER} implementation.
+
+**Your role:** ${SPECIALIST_NAME}
+**Focus area:** ${FOCUS}
+
+## Files to Review
+
+${FILES_MODIFIED}
+
+## Instructions
+
+1. Read all modified files
+2. Review with your specialist focus area in mind
+3. Create findings as team tasks via TaskCreate:
+   - severity: critical/major/minor/cosmetic
+   - file: path to affected file
+   - line: line number(s) if applicable
+   - issue: description of the problem
+   - recommendation: suggested fix
+
+4. Return structured summary:
+   ```
+   ## ${SPECIALIST_NAME} Review
+
+   **Files reviewed:** [count]
+   **Issues found:** [count by severity]
+
+   ### Critical Issues
+   [list]
+
+   ### Recommendations
+   [list]
+   ```
+"
+  )
+done
+```
+
+**5. Monitor verification team:**
+
+```bash
+echo "Verification specialists reviewing implementation..."
+
+while true; do
+  TASK_STATUS=$(TaskList(team_name="verify-${PHASE_NUMBER}"))
+
+  COMPLETED=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "completed")] | length')
+  TOTAL=$(echo "$TASK_STATUS" | jq 'length')
+
+  if [ "$COMPLETED" -eq "$TOTAL" ]; then
+    echo "All specialists complete."
+    break
+  fi
+
+  sleep 15
+done
+```
+
+**6. Aggregate findings and update UAT:**
+
+```bash
+# Collect all findings from team tasks
+FINDINGS=$(TaskList(team_name="verify-${PHASE_NUMBER}") | jq '[.[] | select(.subject | startswith("finding:"))]')
+
+# Count by severity
+CRITICAL=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: critical"))] | length')
+MAJOR=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: major"))] | length')
+MINOR=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: minor"))] | length')
+
+# Append specialist findings to UAT.md
+cat >> "$PHASE_DIR/${PHASE_NUMBER}-UAT.md" << EOF
+
+## Specialist Verification
+
+**Tier:** $VERIFICATION_TIER
+**Specialists:** $(echo $SPECIALISTS | tr ' ' ', ')
+
+### Findings Summary
+
+| Severity | Count |
+|----------|-------|
+| Critical | $CRITICAL |
+| Major    | $MAJOR |
+| Minor    | $MINOR |
+
+### Detailed Findings
+
+$(echo "$FINDINGS" | jq -r '.[] | "- **\(.subject)**: \(.description)"')
+EOF
+
+# Cleanup verification team
+TeamDelete(team_name="verify-${PHASE_NUMBER}")
+
+echo "Specialist verification complete. Findings added to UAT.md"
+```
+
+**7. Handle critical findings:**
+
+If critical findings > 0:
+- Block automatic progression
+- Add critical issues to Gaps section
+- Require explicit user acknowledgment before proceeding
+
+If no critical findings:
+- Proceed to diagnose_issues (if UAT issues exist) or completion
+</step>
+
 <step name="diagnose_issues">
 **Diagnose root causes before planning fixes:**
 

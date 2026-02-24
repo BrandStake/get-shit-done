@@ -342,7 +342,7 @@ Task(
 )
 ```
 
-**Step 3b.** (Tier 2, 3 only) Spawn qa-expert:
+**Step 3b.** (Tier 2, 3 only) You MUST spawn qa-expert NOW - do not skip this:
 ```
 Task(
   subagent_type="qa-expert",
@@ -350,6 +350,7 @@ Task(
   prompt="Review test coverage and quality. Focus on: edge cases, error handling. Return 3-5 line summary."
 )
 ```
+Wait for qa-expert Task to complete before proceeding.
 
 **Step 3c.** (Tier 3 only) Spawn principal-engineer:
 ```
@@ -360,7 +361,26 @@ Task(
 )
 ```
 
-**Step 4.** After ALL Tasks complete (or if ENABLED=false), display:
+**Step 4.** After ALL Tasks complete, compile the specialist findings:
+```
+---
+## Specialist Verification Summary
+
+### Code Review (code-reviewer)
+[Summarize findings from code-reviewer Task]
+
+### QA Review (qa-expert)
+[Summarize findings from qa-expert Task]
+
+### Architecture Review (principal-engineer)
+[Summarize findings from principal-engineer Task]
+
+### Overall Assessment
+- Critical issues: [count]
+- Recommendations for next phase: [list]
+```
+
+**Step 5.** (If ENABLED=false, skip to here) Display next steps:
 ```
 ---
 Verification Complete

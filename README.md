@@ -445,12 +445,47 @@ Every stage uses the same pattern: a thin orchestrator spawns specialized agents
 |-------|------------------|-----------|
 | Research | Coordinates, presents findings | 4 parallel researchers investigate stack, features, architecture, pitfalls |
 | Planning | Validates, manages iteration | Planner creates plans, checker verifies, loop until pass |
-| Execution | Groups into waves, tracks progress | Executors implement in parallel, each with fresh 200k context |
-| Verification | Presents results, routes next | Verifier checks codebase against goals, debuggers diagnose failures |
+| Execution | Groups into waves, tracks progress | **Specialists** execute based on domain (python-pro, docker-expert, etc.) |
+| Verification | Presents results, routes next | **Specialist reviewers** (code-reviewer, qa-expert, principal-engineer) |
 
 The orchestrator never does heavy lifting. It spawns agents, waits, integrates results.
 
 **The result:** You can run an entire phase — deep research, multiple plans created and verified, thousands of lines of code written across parallel executors, automated verification against goals — and your main context window stays at 30-40%. The work happens in fresh subagent contexts. Your session stays fast and responsive.
+
+### Specialist Delegation
+
+GSD automatically routes tasks to domain-specific specialists during execution and verification.
+
+**Execution Specialists** — Tasks are routed based on detected domain:
+
+| Domain | Specialist | Handles |
+|--------|------------|---------|
+| Python/FastAPI/Django | `python-pro` | Python backend, APIs, data science |
+| TypeScript/React/Node | `typescript-pro` | Frontend, full-stack JS/TS |
+| Docker/Kubernetes | `docker-expert` | Containerization, orchestration |
+| Terraform/AWS/Azure | `terraform-engineer` | Infrastructure as code |
+| PostgreSQL/Database | `postgres-pro` | Database design, optimization |
+
+**Verification Specialists** — After execution, specialists review based on tier:
+
+| Tier | Specialists | Triggered By |
+|------|-------------|--------------|
+| 1 | code-reviewer | Default for all code changes |
+| 2 | + qa-expert | API, validation, business logic |
+| 3 | + principal-engineer | Security, auth, database, payments |
+
+The tier is automatically detected from task keywords (e.g., "authentication" → Tier 3).
+
+**129+ specialists available** from VoltAgent plugins across 10 categories: Language, Infrastructure, Data & AI, QA & Security, Core Development, Developer Experience, Specialized Domains, Business & Product, Meta Orchestration, and Research & Analysis.
+
+Enable specialist delegation in `.planning/config.json`:
+```json
+{
+  "agent_teams": {
+    "enabled": true
+  }
+}
+```
 
 ### Atomic Git Commits
 
@@ -591,6 +626,23 @@ Use `/gsd:settings` to toggle these, or override per-invocation:
 |---------|---------|------------------|
 | `parallelization.enabled` | `true` | Run independent plans simultaneously |
 | `planning.commit_docs` | `true` | Track `.planning/` in git |
+
+### Specialist Delegation (Agent Teams)
+
+Route tasks to domain-specific specialists during execution and verification.
+
+| Setting | Default | What it controls |
+|---------|---------|------------------|
+| `agent_teams.enabled` | `true` | Enable specialist routing |
+| `agent_teams.mode` | `auto` | `auto` (detect domains) or `simple` (use gsd-executor) |
+| `agent_teams.specialist_model` | `sonnet` | Model for specialist agents |
+| `agent_teams.fallback_on_failure` | `true` | Fall back to gsd-executor if specialist fails |
+
+When enabled:
+- **Execution** routes to specialists like `python-pro`, `docker-expert`, `typescript-pro`
+- **Verification** spawns `code-reviewer`, `qa-expert`, `principal-engineer` based on tier
+
+Requires [VoltAgent plugins](https://github.com/VoltAgent/awesome-claude-code-subagents) installed in Claude Code.
 
 ### Git Branching
 

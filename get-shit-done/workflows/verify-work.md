@@ -313,18 +313,40 @@ Present summary:
 
 **If issues > 0:** Proceed to `diagnose_issues`
 
-**If issues == 0:**
+**If issues == 0, execute these steps IN ORDER:**
+
+**Step 1.** Display UAT completion:
 ```
 All tests passed or skipped. No issues found.
 ```
 
-**IMPORTANT:** You MUST now proceed to the `specialist_verification` step below to spawn verification specialists. Do NOT show "Next Steps" yet.
+**Step 2.** Check if specialist verification is enabled - run this command:
+```bash
+node -e "const fs=require('fs'); const cfg=JSON.parse(fs.readFileSync('.planning/config.json','utf8')); console.log(cfg.agent_teams?.enabled ? 'SPECIALISTS_ENABLED' : 'SPECIALISTS_DISABLED')"
+```
+
+**Step 3.** If output contains "SPECIALISTS_ENABLED", you MUST spawn the code-reviewer specialist NOW:
+```
+Task(
+  subagent_type="code-reviewer",
+  description="Code review phase files",
+  prompt="Review the source files in this project for code quality. Read main.py, database.py, models.py. Focus on: code quality, patterns, bugs. Return a 3-5 line summary of findings."
+)
+```
+
+**Step 4.** After Task completes (or if SPECIALISTS_DISABLED), display:
+```
+---
+Verification Complete
+
+Next Steps:
+- /gsd:plan-phase {next} — Plan next phase
+- /gsd:execute-phase {next} — Execute next phase
+```
 </step>
 
-<step name="specialist_verification" conditional="agent_teams.enabled == true">
-**Spawn verification specialists via Agent Teams:**
-
-After automated UAT completes, optionally spawn expert verification specialists to review the implementation quality.
+<step name="specialist_verification_legacy" conditional="false">
+**DEPRECATED - specialist verification is now inline in complete_session**
 
 **Prerequisites:** Agent teams feature enabled in config (`agent_teams.enabled: true`).
 

@@ -130,6 +130,36 @@ Installs to `./.claude/` for testing modifications before contributing.
 
 </details>
 
+<details>
+<summary><strong>Installing Local Version (Override Existing Install)</strong></summary>
+
+If you already have GSD installed via npm and want to use a local/forked version instead:
+
+```bash
+# Clone your fork or the main repo
+git clone https://github.com/YOUR_USERNAME/get-shit-done.git
+cd get-shit-done
+
+# Copy directly to global Claude config (overwrites npm version)
+cp -R get-shit-done ~/.claude/get-shit-done
+
+# Copy agents
+cp -R agents/* ~/.claude/agents/
+
+# Verify installation
+ls ~/.claude/get-shit-done/
+```
+
+To switch back to the npm version:
+```bash
+npx get-shit-done-cc@latest --claude --global
+```
+
+> [!NOTE]
+> The local copy takes precedence because it's in the same location. Running the npm installer again will overwrite your local changes.
+
+</details>
+
 ### Recommended: Skip Permissions Mode
 
 GSD is designed for frictionless automation. Run Claude Code with:

@@ -1,11 +1,11 @@
 /**
  * Agents — VoltAgent specialist enumeration and discovery
  *
- * Purpose: Enable orchestrators to enumerate available specialists from ~/.claude/agents/
- * and validate their availability before spawning.
+ * Purpose: Enable orchestrators to enumerate available specialists from voltagent plugins
+ * and ~/.claude/agents/ for validation before spawning.
  *
- * Fixes v1.21 broken delegation by moving specialist discovery to orchestrator layer
- * where Task tool access exists.
+ * Dynamically reads from ~/.claude/plugins/marketplaces/voltagent-subagents/categories/
+ * to discover installed VoltAgent specialists.
  */
 
 const fs = require('fs');
@@ -14,62 +14,121 @@ const os = require('os');
 const { output, error } = require('./core.cjs');
 
 /**
- * Built-in VoltAgent specialists available via Claude Code's Task tool.
- * These are registered as subagent_types, not .md files.
- * Keep in sync with gsd-executor.md specialist_registry.
+ * Category mapping from plugin folder names to display info
  */
-const VOLT_AGENTS = [
-  // Language Specialists (voltagent-lang)
-  { name: 'voltagent-lang:python-pro', description: 'Python development, web frameworks, data science', category: 'lang' },
-  { name: 'voltagent-lang:typescript-pro', description: 'TypeScript development, React, frameworks', category: 'lang' },
-  { name: 'voltagent-lang:javascript-pro', description: 'JavaScript, Node.js, Express', category: 'lang' },
-  { name: 'voltagent-lang:golang-pro', description: 'Go development, concurrency', category: 'lang' },
-  { name: 'voltagent-lang:rust-engineer', description: 'Rust development, systems programming', category: 'lang' },
-  { name: 'voltagent-lang:java-architect', description: 'Java, Spring, enterprise', category: 'lang' },
-  { name: 'voltagent-lang:csharp-developer', description: 'C#, .NET, ASP.NET', category: 'lang' },
-  { name: 'voltagent-lang:rails-expert', description: 'Ruby, Rails', category: 'lang' },
-  { name: 'voltagent-lang:php-pro', description: 'PHP, Laravel, Symfony', category: 'lang' },
-  { name: 'voltagent-lang:swift-expert', description: 'Swift, iOS, macOS development', category: 'lang' },
-  { name: 'voltagent-lang:react-specialist', description: 'React development', category: 'lang' },
-  { name: 'voltagent-lang:vue-expert', description: 'Vue.js development', category: 'lang' },
-  { name: 'voltagent-lang:angular-architect', description: 'Angular development', category: 'lang' },
-  { name: 'voltagent-lang:nextjs-developer', description: 'Next.js development', category: 'lang' },
-  { name: 'voltagent-lang:flutter-expert', description: 'Flutter cross-platform', category: 'lang' },
-  { name: 'voltagent-lang:spring-boot-engineer', description: 'Spring Boot applications', category: 'lang' },
-  { name: 'voltagent-lang:laravel-specialist', description: 'Laravel applications', category: 'lang' },
+const CATEGORY_MAP = {
+  '01-core-development': { key: 'core-dev', title: '### Core Development', prefix: 'voltagent-core-dev' },
+  '02-language-specialists': { key: 'lang', title: '### Language', prefix: 'voltagent-lang' },
+  '03-infrastructure': { key: 'infra', title: '### Infrastructure', prefix: 'voltagent-infra' },
+  '04-quality-security': { key: 'qa-sec', title: '### QA & Security', prefix: 'voltagent-qa-sec' },
+  '05-data-ai': { key: 'data-ai', title: '### Data & AI', prefix: 'voltagent-data-ai' },
+  '06-developer-experience': { key: 'dev-exp', title: '### Developer Experience', prefix: 'voltagent-dev-exp' },
+  '07-specialized-domains': { key: 'domains', title: '### Specialized Domains', prefix: 'voltagent-domains' },
+  '08-business-product': { key: 'biz', title: '### Business & Product', prefix: 'voltagent-biz' },
+  '09-meta-orchestration': { key: 'meta', title: '### Meta & Orchestration', prefix: 'voltagent-meta' },
+  '10-research-analysis': { key: 'research', title: '### Research & Analysis', prefix: 'voltagent-research' },
+};
 
-  // Infrastructure Specialists (voltagent-infra)
-  { name: 'voltagent-infra:kubernetes-specialist', description: 'Kubernetes orchestration, deployments', category: 'infra' },
-  { name: 'voltagent-infra:docker-expert', description: 'Docker containerization', category: 'infra' },
-  { name: 'voltagent-infra:terraform-engineer', description: 'Infrastructure as code, Terraform', category: 'infra' },
-  { name: 'voltagent-infra:devops-engineer', description: 'CI/CD pipelines, DevOps', category: 'infra' },
-  { name: 'voltagent-infra:cloud-architect', description: 'AWS, Azure, GCP cloud architecture', category: 'infra' },
-  { name: 'voltagent-infra:security-engineer', description: 'Security architecture, authentication', category: 'infra' },
+/**
+ * Dynamically enumerate VoltAgent specialists from installed plugins
+ * @returns {Array<Object>} - Array of {name, description, category} objects
+ */
+function enumerateVoltAgents() {
+  const pluginsDir = path.join(os.homedir(), '.claude', 'plugins', 'marketplaces', 'voltagent-subagents', 'categories');
 
-  // Data & AI Specialists (voltagent-data-ai)
-  { name: 'voltagent-data-ai:postgres-pro', description: 'PostgreSQL database design, optimization', category: 'data-ai' },
-  { name: 'voltagent-data-ai:database-optimizer', description: 'Database performance tuning', category: 'data-ai' },
-  { name: 'voltagent-data-ai:data-engineer', description: 'Data pipelines, ETL', category: 'data-ai' },
-  { name: 'voltagent-data-ai:ml-engineer', description: 'ML model development', category: 'data-ai' },
-  { name: 'voltagent-data-ai:nlp-engineer', description: 'Natural language processing', category: 'data-ai' },
+  if (!fs.existsSync(pluginsDir)) {
+    // Fallback: plugins not installed, return empty
+    return [];
+  }
 
-  // QA & Security (voltagent-qa-sec)
-  { name: 'voltagent-qa-sec:qa-expert', description: 'Quality assurance, testing strategy', category: 'qa-sec' },
-  { name: 'voltagent-qa-sec:test-automator', description: 'Test automation', category: 'qa-sec' },
-  { name: 'voltagent-qa-sec:performance-engineer', description: 'Performance testing', category: 'qa-sec' },
-  { name: 'voltagent-qa-sec:penetration-tester', description: 'Security testing', category: 'qa-sec' },
+  const agents = [];
 
-  // Core Development (voltagent-core-dev)
-  { name: 'voltagent-core-dev:api-designer', description: 'API design, REST, GraphQL', category: 'core-dev' },
-  { name: 'voltagent-core-dev:backend-developer', description: 'Backend development', category: 'core-dev' },
-  { name: 'voltagent-core-dev:fullstack-developer', description: 'Full-stack development', category: 'core-dev' },
-  { name: 'voltagent-core-dev:mobile-developer', description: 'Mobile development', category: 'core-dev' },
-  { name: 'voltagent-core-dev:microservices-architect', description: 'Microservices architecture', category: 'core-dev' },
+  try {
+    const categories = fs.readdirSync(pluginsDir);
 
-  // Meta Specialists (voltagent-meta)
-  { name: 'voltagent-meta:multi-agent-coordinator', description: 'Coordinating multiple specialists', category: 'meta' },
-  { name: 'voltagent-meta:workflow-orchestrator', description: 'Complex workflow orchestration', category: 'meta' },
-];
+    for (const categoryDir of categories) {
+      const categoryPath = path.join(pluginsDir, categoryDir);
+      const pluginJsonPath = path.join(categoryPath, '.claude-plugin', 'plugin.json');
+
+      if (!fs.existsSync(pluginJsonPath)) continue;
+
+      try {
+        const pluginJson = JSON.parse(fs.readFileSync(pluginJsonPath, 'utf-8'));
+        const categoryInfo = CATEGORY_MAP[categoryDir];
+
+        if (!categoryInfo || !pluginJson.agents) continue;
+
+        // Get prefix from plugin.json name field (e.g., "voltagent-lang")
+        const prefix = pluginJson.name || categoryInfo.prefix;
+
+        for (const agentRef of pluginJson.agents) {
+          // agentRef is like "./python-pro.md"
+          const agentFilename = agentRef.replace('./', '').replace('.md', '');
+          const agentMdPath = path.join(categoryPath, agentRef.replace('./', ''));
+
+          // Try to get description from .md file frontmatter
+          let description = 'Specialist agent';
+          if (fs.existsSync(agentMdPath)) {
+            try {
+              const content = fs.readFileSync(agentMdPath, 'utf-8');
+              const descMatch = content.match(/^description:\s*["']?([^"'\n]+)["']?/m);
+              if (descMatch) {
+                description = descMatch[1].trim();
+                // Truncate long descriptions
+                if (description.length > 100) {
+                  description = description.substring(0, 97) + '...';
+                }
+              }
+            } catch (e) {
+              // Ignore read errors, use default description
+            }
+          }
+
+          agents.push({
+            name: `${prefix}:${agentFilename}`,
+            description,
+            category: categoryInfo.key,
+          });
+        }
+      } catch (e) {
+        // Ignore JSON parse errors for individual categories
+        console.error(`Warning: Could not parse ${pluginJsonPath}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    console.error(`Error enumerating VoltAgent plugins: ${e.message}`);
+  }
+
+  return agents;
+}
+
+// Cache for VOLT_AGENTS (lazy-loaded)
+let _voltAgentsCache = null;
+
+/**
+ * Get VoltAgent specialists (dynamically enumerated, cached)
+ * @returns {Array<Object>} - Array of {name, description, category}
+ */
+function getVoltAgents() {
+  if (_voltAgentsCache === null) {
+    _voltAgentsCache = enumerateVoltAgents();
+  }
+  return _voltAgentsCache;
+}
+
+/**
+ * Clear the VoltAgent cache (for testing or after plugin changes)
+ */
+function clearVoltAgentCache() {
+  _voltAgentsCache = null;
+}
+
+// For backwards compatibility, expose as VOLT_AGENTS getter
+Object.defineProperty(module.exports, 'VOLT_AGENTS', {
+  get: function() {
+    return getVoltAgents();
+  }
+});
 
 /**
  * Extract agent metadata from frontmatter in .md file
@@ -152,37 +211,38 @@ function enumerateAgents(agentsDir) {
  */
 function generateAvailableAgentsMd(fileAgents, timestamp) {
   const lines = [];
+  const voltAgents = getVoltAgents();
 
   lines.push('# Available Specialists');
   lines.push('');
   lines.push(`_Generated: ${timestamp}_`);
   lines.push('');
 
-  // Section 1: VoltAgent Built-in Specialists (always available)
-  lines.push('## VoltAgent Specialists (Built-in)');
+  // Section 1: VoltAgent Built-in Specialists (dynamically discovered)
+  lines.push('## VoltAgent Specialists (Installed Plugins)');
   lines.push('');
   lines.push('These specialists are available via Claude Code Task tool. Use the full name as `specialist:` value.');
   lines.push('');
 
-  // Group by category
-  const categories = {
-    'lang': { title: '### Language', agents: [] },
-    'infra': { title: '### Infrastructure', agents: [] },
-    'data-ai': { title: '### Data & AI', agents: [] },
-    'qa-sec': { title: '### QA & Security', agents: [] },
-    'core-dev': { title: '### Core Development', agents: [] },
-    'meta': { title: '### Meta', agents: [] },
-  };
+  // Build categories dynamically from CATEGORY_MAP
+  const categories = {};
+  for (const [dirName, info] of Object.entries(CATEGORY_MAP)) {
+    categories[info.key] = { title: info.title, agents: [] };
+  }
 
-  for (const agent of VOLT_AGENTS) {
+  for (const agent of voltAgents) {
     if (categories[agent.category]) {
       categories[agent.category].agents.push(agent);
     }
   }
 
-  for (const [key, cat] of Object.entries(categories)) {
-    if (cat.agents.length > 0) {
+  // Output in order defined by CATEGORY_MAP
+  for (const [dirName, info] of Object.entries(CATEGORY_MAP)) {
+    const cat = categories[info.key];
+    if (cat && cat.agents.length > 0) {
       lines.push(cat.title);
+      // Sort agents alphabetically within category
+      cat.agents.sort((a, b) => a.name.localeCompare(b.name));
       for (const agent of cat.agents) {
         lines.push(`- \`${agent.name}\`: ${agent.description}`);
       }
@@ -250,8 +310,9 @@ function cmdEnumerateAgents(cwd, outputPath) {
   // Write output file
   try {
     fs.writeFileSync(output_path, markdown, 'utf-8');
-    const totalCount = VOLT_AGENTS.length + agents.length;
-    console.log(`Generated: ${output_path} (${VOLT_AGENTS.length} volt + ${agents.length} custom = ${totalCount} specialists)`);
+    const voltAgents = getVoltAgents();
+    const totalCount = voltAgents.length + agents.length;
+    console.log(`Generated: ${output_path} (${voltAgents.length} volt + ${agents.length} custom = ${totalCount} specialists)`);
   } catch (err) {
     error(`Failed to write ${output_path}: ${err.message}`);
   }
@@ -401,10 +462,14 @@ function cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable 
 }
 
 module.exports = {
-  VOLT_AGENTS,
+  // VOLT_AGENTS is defined as a getter above for backwards compatibility
+  CATEGORY_MAP,
   cmdEnumerateAgents,
   cmdDetermineVerificationTier,
   enumerateAgents,
+  enumerateVoltAgents,
+  getVoltAgents,
+  clearVoltAgentCache,
   extractAgentMetadata,
   filterGsdSystemAgents,
   generateAvailableAgentsMd,

@@ -315,11 +315,10 @@ Present summary:
 
 **If issues == 0:**
 ```
-All tests passed. Ready to continue.
-
-- `/gsd:plan-phase {next}` — Plan next phase
-- `/gsd:execute-phase {next}` — Execute next phase
+All tests passed or skipped. No issues found.
 ```
+
+**IMPORTANT:** You MUST now proceed to the `specialist_verification` step below to spawn verification specialists. Do NOT show "Next Steps" yet.
 </step>
 
 <step name="specialist_verification" conditional="agent_teams.enabled == true">
@@ -492,7 +491,16 @@ If critical findings > 0:
 - Require explicit user acknowledgment before proceeding
 
 If no critical findings:
-- Proceed to diagnose_issues (if UAT issues exist) or completion
+- Proceed to diagnose_issues (if UAT issues exist)
+- Otherwise, display:
+```
+---
+Specialist verification complete. No critical issues.
+
+Next Steps:
+- /gsd:plan-phase {next} — Plan next phase
+- /gsd:execute-phase {next} — Execute next phase
+```
 </step>
 
 <step name="diagnose_issues">

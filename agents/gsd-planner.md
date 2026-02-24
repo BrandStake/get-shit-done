@@ -299,20 +299,31 @@ Record in `user_setup` frontmatter. Only include what Claude literally cannot do
 
 4. **Assign to task frontmatter:**
    - Add specialist field to tasks array in PLAN.md frontmatter
-   - Format: `specialist: python-pro` or `specialist: null`
+   - Format: `specialist: voltagent-lang:python-pro` or `specialist: null`
    - Null-safe: specialist=null means direct gsd-executor execution
+   - Use FULL volt agent names from available_agents.md (e.g., `voltagent-lang:python-pro`)
 
-**Domain detection patterns (REUSE from v1.21):**
+**Domain detection patterns (use full voltagent names):**
 
 | Domain | Keywords | Specialist |
 |--------|----------|------------|
-| Python | python, fastapi, django, flask, pytest | python-pro |
-| TypeScript | typescript, tsx, react, next.js | typescript-pro |
-| Go | golang, go module, go.mod | golang-pro |
-| Kubernetes | kubernetes, k8s, kubectl, helm | kubernetes-specialist |
-| Docker | docker, dockerfile, container | docker-expert |
-| React | react, jsx, component, hooks | react-specialist |
-| API | rest api, graphql, endpoint | api-specialist |
+| Python | python, fastapi, django, flask, pytest, pyproject.toml, .py | voltagent-lang:python-pro |
+| TypeScript | typescript, tsx, tsconfig | voltagent-lang:typescript-pro |
+| JavaScript | javascript, node, express, npm | voltagent-lang:javascript-pro |
+| Go | golang, go module, go.mod | voltagent-lang:golang-pro |
+| Rust | rust, cargo, .rs | voltagent-lang:rust-engineer |
+| Java | java, spring, maven, gradle | voltagent-lang:java-architect |
+| React | react, jsx, hooks, redux | voltagent-lang:react-specialist |
+| Vue | vue, vuex, nuxt | voltagent-lang:vue-expert |
+| Angular | angular, rxjs, ngrx | voltagent-lang:angular-architect |
+| Next.js | next.js, nextjs, app router | voltagent-lang:nextjs-developer |
+| Kubernetes | kubernetes, k8s, kubectl, helm | voltagent-infra:kubernetes-specialist |
+| Docker | docker, dockerfile, container | voltagent-infra:docker-expert |
+| Terraform | terraform, .tf, tfvars | voltagent-infra:terraform-engineer |
+| CI/CD | pipeline, github actions, jenkins | voltagent-infra:devops-engineer |
+| Database | postgres, sql, migration | voltagent-data-ai:postgres-pro |
+| API | rest api, graphql, endpoint, openapi | voltagent-core-dev:api-designer |
+| Backend | backend, server, microservices | voltagent-core-dev:backend-developer |
 
 **Fallback behavior:**
 - Task with no domain match → specialist: null (direct execution)
@@ -336,7 +347,7 @@ must_haves:
   artifacts: []
   key_links: []
 tasks:
-  - specialist: python-pro  # FastAPI task, python-pro available
+  - specialist: voltagent-lang:python-pro  # Python/FastAPI task
     name: Create FastAPI user endpoint
   - specialist: null  # Config task, no specialist match
     name: Update environment variables
@@ -344,6 +355,65 @@ tasks:
 ```
 
 </specialist_assignment>
+
+<verification_assignment>
+## Assigning Verification Specialists to Plans
+
+After creating each plan, determine verification tier based on domain detection.
+
+**Verification tier detection (based on task descriptions and files_modified):**
+
+| Tier | Trigger Keywords | Verification Specialists |
+|------|------------------|--------------------------|
+| 1 | Docs, readme, comments, simple config | voltagent-qa-sec:code-reviewer |
+| 2 | API, business logic, integration, tests | voltagent-qa-sec:code-reviewer, voltagent-qa-sec:qa-expert |
+| 3 | Security, auth, payments, database | voltagent-qa-sec:code-reviewer, voltagent-qa-sec:qa-expert, voltagent-infra:security-engineer |
+
+**IMPORTANT:** Minimum tier is 1. Every plan gets at least `voltagent-qa-sec:code-reviewer`.
+
+**Tier 3 keywords (always trigger security review):**
+- security, auth, authentication, authorization, oauth
+- payment, billing, stripe, checkout, subscription
+- database, migration, schema, encryption, password, token, jwt
+
+**Tier 2 keywords:**
+- api, endpoint, route, controller, service
+- business logic, validation, integration, webhook
+- error handling, cache, queue, worker
+
+**Add verification block to plan frontmatter:**
+
+```yaml
+---
+phase: XX-name
+plan: NN
+type: execute
+wave: 1
+depends_on: []
+files_modified: [src/api/users.py]
+autonomous: true
+requirements: [REQ-01]
+specialist: voltagent-lang:python-pro
+verification:
+  tier: 2
+  specialists:
+    - voltagent-qa-sec:code-reviewer
+    - voltagent-qa-sec:qa-expert
+  reason: "API endpoint detected"
+must_haves:
+  truths: []
+  artifacts: []
+  key_links: []
+---
+```
+
+**Rules:**
+- Derive tier from task descriptions and files_modified
+- Security/auth code ALWAYS gets tier 3 with security-engineer
+- **Minimum tier is 1** — every plan gets at least code-reviewer
+- Default to tier 1 if unclear
+- Include `reason` field explaining tier selection
+</verification_assignment>
 
 <dependency_graph>
 
@@ -481,6 +551,10 @@ files_modified: []          # Files this plan touches
 autonomous: true            # false if plan has checkpoints
 requirements: []            # REQUIRED — Requirement IDs from ROADMAP this plan addresses. MUST NOT be empty.
 user_setup: []              # Human-required setup (omit if empty)
+verification:               # REQUIRED — Verification specialists to spawn after execution
+  tier: N                   # 0-3 based on task content (see <verification_assignment>)
+  specialists: []           # Volt agent names to run during verification
+  reason: ""                # Brief explanation of tier selection
 
 must_haves:
   truths: []                # Observable behaviors
@@ -546,6 +620,7 @@ After completion, create `.planning/phases/XX-name/{phase}-{plan}-SUMMARY.md`
 | `files_modified` | Yes | Files this plan touches |
 | `autonomous` | Yes | `true` if no checkpoints |
 | `requirements` | Yes | **MUST** list requirement IDs from ROADMAP. Every roadmap requirement ID MUST appear in at least one plan. |
+| `verification` | Yes | **MUST** include tier (0-3), specialists array, and reason. See `<verification_assignment>` section. |
 | `user_setup` | No | Human-required setup items |
 | `must_haves` | Yes | Goal-backward verification criteria |
 
@@ -1161,6 +1236,7 @@ Returns JSON: `{ valid, missing, present, schema }`
 
 Required plan frontmatter fields:
 - `phase`, `plan`, `type`, `wave`, `depends_on`, `files_modified`, `autonomous`, `must_haves`
+- `verification` (with `tier`, `specialists`, `reason`) — MUST be present, see `<verification_assignment>`
 
 Also validate plan structure:
 
@@ -1286,6 +1362,7 @@ Phase planning complete when:
 - [ ] PLAN file(s) exist with XML structure
 - [ ] Each plan: depends_on, files_modified, autonomous, must_haves in frontmatter
 - [ ] Each plan: user_setup declared if external services involved
+- [ ] Each plan: **verification block with tier, specialists, reason** (REQUIRED - see <verification_assignment>)
 - [ ] Each plan: Objective, context, tasks, verification, success criteria, output
 - [ ] Each plan: 2-3 tasks (~50% context)
 - [ ] Each task: Type, Files (if auto), Action, Verify, Done

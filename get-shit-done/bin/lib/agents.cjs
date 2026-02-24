@@ -14,6 +14,64 @@ const os = require('os');
 const { output, error } = require('./core.cjs');
 
 /**
+ * Built-in VoltAgent specialists available via Claude Code's Task tool.
+ * These are registered as subagent_types, not .md files.
+ * Keep in sync with gsd-executor.md specialist_registry.
+ */
+const VOLT_AGENTS = [
+  // Language Specialists (voltagent-lang)
+  { name: 'voltagent-lang:python-pro', description: 'Python development, web frameworks, data science', category: 'lang' },
+  { name: 'voltagent-lang:typescript-pro', description: 'TypeScript development, React, frameworks', category: 'lang' },
+  { name: 'voltagent-lang:javascript-pro', description: 'JavaScript, Node.js, Express', category: 'lang' },
+  { name: 'voltagent-lang:golang-pro', description: 'Go development, concurrency', category: 'lang' },
+  { name: 'voltagent-lang:rust-engineer', description: 'Rust development, systems programming', category: 'lang' },
+  { name: 'voltagent-lang:java-architect', description: 'Java, Spring, enterprise', category: 'lang' },
+  { name: 'voltagent-lang:csharp-developer', description: 'C#, .NET, ASP.NET', category: 'lang' },
+  { name: 'voltagent-lang:rails-expert', description: 'Ruby, Rails', category: 'lang' },
+  { name: 'voltagent-lang:php-pro', description: 'PHP, Laravel, Symfony', category: 'lang' },
+  { name: 'voltagent-lang:swift-expert', description: 'Swift, iOS, macOS development', category: 'lang' },
+  { name: 'voltagent-lang:react-specialist', description: 'React development', category: 'lang' },
+  { name: 'voltagent-lang:vue-expert', description: 'Vue.js development', category: 'lang' },
+  { name: 'voltagent-lang:angular-architect', description: 'Angular development', category: 'lang' },
+  { name: 'voltagent-lang:nextjs-developer', description: 'Next.js development', category: 'lang' },
+  { name: 'voltagent-lang:flutter-expert', description: 'Flutter cross-platform', category: 'lang' },
+  { name: 'voltagent-lang:spring-boot-engineer', description: 'Spring Boot applications', category: 'lang' },
+  { name: 'voltagent-lang:laravel-specialist', description: 'Laravel applications', category: 'lang' },
+
+  // Infrastructure Specialists (voltagent-infra)
+  { name: 'voltagent-infra:kubernetes-specialist', description: 'Kubernetes orchestration, deployments', category: 'infra' },
+  { name: 'voltagent-infra:docker-expert', description: 'Docker containerization', category: 'infra' },
+  { name: 'voltagent-infra:terraform-engineer', description: 'Infrastructure as code, Terraform', category: 'infra' },
+  { name: 'voltagent-infra:devops-engineer', description: 'CI/CD pipelines, DevOps', category: 'infra' },
+  { name: 'voltagent-infra:cloud-architect', description: 'AWS, Azure, GCP cloud architecture', category: 'infra' },
+  { name: 'voltagent-infra:security-engineer', description: 'Security architecture, authentication', category: 'infra' },
+
+  // Data & AI Specialists (voltagent-data-ai)
+  { name: 'voltagent-data-ai:postgres-pro', description: 'PostgreSQL database design, optimization', category: 'data-ai' },
+  { name: 'voltagent-data-ai:database-optimizer', description: 'Database performance tuning', category: 'data-ai' },
+  { name: 'voltagent-data-ai:data-engineer', description: 'Data pipelines, ETL', category: 'data-ai' },
+  { name: 'voltagent-data-ai:ml-engineer', description: 'ML model development', category: 'data-ai' },
+  { name: 'voltagent-data-ai:nlp-engineer', description: 'Natural language processing', category: 'data-ai' },
+
+  // QA & Security (voltagent-qa-sec)
+  { name: 'voltagent-qa-sec:qa-expert', description: 'Quality assurance, testing strategy', category: 'qa-sec' },
+  { name: 'voltagent-qa-sec:test-automator', description: 'Test automation', category: 'qa-sec' },
+  { name: 'voltagent-qa-sec:performance-engineer', description: 'Performance testing', category: 'qa-sec' },
+  { name: 'voltagent-qa-sec:penetration-tester', description: 'Security testing', category: 'qa-sec' },
+
+  // Core Development (voltagent-core-dev)
+  { name: 'voltagent-core-dev:api-designer', description: 'API design, REST, GraphQL', category: 'core-dev' },
+  { name: 'voltagent-core-dev:backend-developer', description: 'Backend development', category: 'core-dev' },
+  { name: 'voltagent-core-dev:fullstack-developer', description: 'Full-stack development', category: 'core-dev' },
+  { name: 'voltagent-core-dev:mobile-developer', description: 'Mobile development', category: 'core-dev' },
+  { name: 'voltagent-core-dev:microservices-architect', description: 'Microservices architecture', category: 'core-dev' },
+
+  // Meta Specialists (voltagent-meta)
+  { name: 'voltagent-meta:multi-agent-coordinator', description: 'Coordinating multiple specialists', category: 'meta' },
+  { name: 'voltagent-meta:workflow-orchestrator', description: 'Complex workflow orchestration', category: 'meta' },
+];
+
+/**
  * Extract agent metadata from frontmatter in .md file
  * @param {string} filePath - Path to agent .md file
  * @returns {Object|null} - {name, description} or null if file unreadable
@@ -88,11 +146,11 @@ function enumerateAgents(agentsDir) {
 
 /**
  * Generate available_agents.md markdown output
- * @param {Array<Object>} agents - Array of agent metadata
+ * @param {Array<Object>} fileAgents - Array of agent metadata from .md files
  * @param {string} timestamp - ISO timestamp for generation time
  * @returns {string} - Markdown content
  */
-function generateAvailableAgentsMd(agents, timestamp) {
+function generateAvailableAgentsMd(fileAgents, timestamp) {
   const lines = [];
 
   lines.push('# Available Specialists');
@@ -100,40 +158,67 @@ function generateAvailableAgentsMd(agents, timestamp) {
   lines.push(`_Generated: ${timestamp}_`);
   lines.push('');
 
-  if (agents.length === 0) {
-    lines.push('No VoltAgent specialists found in `~/.claude/agents/`.');
-    lines.push('');
-    lines.push('To add specialists, install VoltAgent plugins:');
-    lines.push('```bash');
-    lines.push('claude plugin install voltagent-lang@voltagent-subagents');
-    lines.push('claude plugin install voltagent-infra@voltagent-subagents');
-    lines.push('```');
-  } else {
-    lines.push('## Installed Specialists');
+  // Section 1: VoltAgent Built-in Specialists (always available)
+  lines.push('## VoltAgent Specialists (Built-in)');
+  lines.push('');
+  lines.push('These specialists are available via Claude Code Task tool. Use the full name as `specialist:` value.');
+  lines.push('');
+
+  // Group by category
+  const categories = {
+    'lang': { title: '### Language', agents: [] },
+    'infra': { title: '### Infrastructure', agents: [] },
+    'data-ai': { title: '### Data & AI', agents: [] },
+    'qa-sec': { title: '### QA & Security', agents: [] },
+    'core-dev': { title: '### Core Development', agents: [] },
+    'meta': { title: '### Meta', agents: [] },
+  };
+
+  for (const agent of VOLT_AGENTS) {
+    if (categories[agent.category]) {
+      categories[agent.category].agents.push(agent);
+    }
+  }
+
+  for (const [key, cat] of Object.entries(categories)) {
+    if (cat.agents.length > 0) {
+      lines.push(cat.title);
+      for (const agent of cat.agents) {
+        lines.push(`- \`${agent.name}\`: ${agent.description}`);
+      }
+      lines.push('');
+    }
+  }
+
+  // Section 2: File-based agents (from ~/.claude/agents/)
+  if (fileAgents.length > 0) {
+    lines.push('## Custom Specialists (from ~/.claude/agents/)');
     lines.push('');
 
-    // Sort agents by name for consistent output
-    const sorted = agents.slice().sort((a, b) => a.name.localeCompare(b.name));
-
+    const sorted = fileAgents.slice().sort((a, b) => a.name.localeCompare(b.name));
     for (const agent of sorted) {
       lines.push(`- **${agent.name}**: ${agent.description}`);
     }
-
     lines.push('');
-    lines.push('## Usage');
-    lines.push('');
-    lines.push('Reference specialists in PLAN.md task frontmatter:');
-    lines.push('');
-    lines.push('```yaml');
-    lines.push('---');
-    lines.push('specialist: python-pro');
-    lines.push('---');
-    lines.push('```');
-    lines.push('');
-    lines.push('The orchestrator will validate availability and spawn the specialist for task execution.');
   }
 
+  // Usage section
+  lines.push('## Usage');
   lines.push('');
+  lines.push('Reference specialists in PLAN.md task frontmatter:');
+  lines.push('');
+  lines.push('```yaml');
+  lines.push('specialist: voltagent-lang:python-pro');
+  lines.push('```');
+  lines.push('');
+  lines.push('For custom agents:');
+  lines.push('```yaml');
+  lines.push('specialist: code-reviewer');
+  lines.push('```');
+  lines.push('');
+  lines.push('The executor will spawn the specialist for task execution. If unavailable, falls back to direct execution.');
+  lines.push('');
+
   return lines.join('\n');
 }
 
@@ -165,7 +250,8 @@ function cmdEnumerateAgents(cwd, outputPath) {
   // Write output file
   try {
     fs.writeFileSync(output_path, markdown, 'utf-8');
-    console.log(`Generated: ${output_path} (${agents.length} specialists found)`);
+    const totalCount = VOLT_AGENTS.length + agents.length;
+    console.log(`Generated: ${output_path} (${VOLT_AGENTS.length} volt + ${agents.length} custom = ${totalCount} specialists)`);
   } catch (err) {
     error(`Failed to write ${output_path}: ${err.message}`);
   }
@@ -192,19 +278,19 @@ function determineVerificationTier(taskDescription, fileList, options = {}) {
       return {
         tier: 1,
         reason: 'Explicitly set to Tier 1 via verification_tier',
-        specialists: ['code-reviewer']
+        specialists: ['voltagent-qa-sec:code-reviewer']
       };
     } else if (tier === 2) {
       return {
         tier: 2,
         reason: 'Explicitly set to Tier 2 via verification_tier',
-        specialists: ['code-reviewer', 'qa-expert']
+        specialists: ['voltagent-qa-sec:code-reviewer', 'voltagent-qa-sec:qa-expert']
       };
     } else if (tier === 3) {
       return {
         tier: 3,
         reason: 'Explicitly set to Tier 3 via verification_tier',
-        specialists: ['code-reviewer', 'qa-expert', 'principal-engineer']
+        specialists: ['voltagent-qa-sec:code-reviewer', 'voltagent-qa-sec:qa-expert', 'voltagent-infra:security-engineer']
       };
     }
   }
@@ -213,7 +299,12 @@ function determineVerificationTier(taskDescription, fileList, options = {}) {
   const files = (fileList || '').toLowerCase();
   const combined = `${description} ${files}`;
 
-  // Tier 3: Critical paths requiring full verification team
+  // Tier 0: Documentation only - skip verification
+  const tier0Keywords = [
+    'readme', 'documentation', 'docs only', 'comment', 'changelog'
+  ];
+
+  // Tier 3: Critical paths requiring full verification team (security-focused)
   const tier3Keywords = [
     'security', 'auth', 'authentication', 'authorization', 'oauth',
     'payment', 'billing', 'stripe', 'checkout', 'subscription',
@@ -231,24 +322,35 @@ function determineVerificationTier(taskDescription, fileList, options = {}) {
     'test', 'coverage', 'e2e', 'integration test'
   ];
 
-  // Check for tier 3 keywords
+  // Check for tier 0 keywords (docs only)
+  for (const keyword of tier0Keywords) {
+    if (combined.includes(keyword) && !combined.match(/\.(py|js|ts|go|rs|java|rb|php)$/)) {
+      return {
+        tier: 0,
+        reason: `Documentation only: ${keyword}`,
+        specialists: []
+      };
+    }
+  }
+
+  // Check for tier 3 keywords (security/critical)
   for (const keyword of tier3Keywords) {
     if (combined.includes(keyword)) {
       return {
         tier: 3,
         reason: `Critical path detected: ${keyword}`,
-        specialists: ['code-reviewer', 'qa-expert', 'principal-engineer']
+        specialists: ['voltagent-qa-sec:code-reviewer', 'voltagent-qa-sec:qa-expert', 'voltagent-infra:security-engineer']
       };
     }
   }
 
-  // Check for tier 2 keywords
+  // Check for tier 2 keywords (standard features)
   for (const keyword of tier2Keywords) {
     if (combined.includes(keyword)) {
       return {
         tier: 2,
         reason: `Standard feature detected: ${keyword}`,
-        specialists: ['code-reviewer', 'qa-expert']
+        specialists: ['voltagent-qa-sec:code-reviewer', 'voltagent-qa-sec:qa-expert']
       };
     }
   }
@@ -273,7 +375,7 @@ function determineVerificationTier(taskDescription, fileList, options = {}) {
   return {
     tier: 1,
     reason: 'Simple change - light review',
-    specialists: ['code-reviewer']
+    specialists: ['voltagent-qa-sec:code-reviewer']
   };
 }
 
@@ -299,6 +401,7 @@ function cmdDetermineVerificationTier(taskDescription, fileList, checkAvailable 
 }
 
 module.exports = {
+  VOLT_AGENTS,
   cmdEnumerateAgents,
   cmdDetermineVerificationTier,
   enumerateAgents,

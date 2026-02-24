@@ -294,7 +294,111 @@ grep -n -B 2 -A 2 "console\.log" "$file" 2>/dev/null | grep -E "^\s*(const|funct
 
 Categorize: 🛑 Blocker (prevents goal) | ⚠️ Warning (incomplete) | ℹ️ Info (notable)
 
-## Step 8: Identify Human Verification Needs
+## Step 8: Spawn Verification Specialists
+
+After automated verification, spawn domain specialists for deeper code review.
+
+**8.1 Load verification config from plan frontmatter:**
+
+```bash
+# Extract verification block from plan frontmatter
+PLAN_PATH="$PHASE_DIR"/*-PLAN.md
+```
+
+Check for `verification:` block in plan frontmatter:
+
+```yaml
+verification:
+  tier: 2
+  specialists:
+    - voltagent-qa-sec:code-reviewer
+    - voltagent-qa-sec:qa-expert
+  reason: "API endpoint detected"
+```
+
+**If no `verification:` block exists:** Skip specialist verification, proceed to Step 9. (Note: All new plans should have verification block with minimum tier 1.)
+
+**8.2 Spawn specialists in parallel:**
+
+For each specialist in `verification.specialists` array, spawn via Task tool:
+
+```
+Task(
+  subagent_type="{specialist}",  // e.g., "voltagent-qa-sec:code-reviewer"
+  model="sonnet",
+  prompt="""
+<review_context>
+**Phase:** {phase_number}
+**Plan:** {plan_number}
+**What was built:** {Summary from SUMMARY.md accomplishments section}
+
+**Files to review:**
+{files_modified from plan frontmatter}
+</review_context>
+
+<files_to_read>
+- {each file in files_modified}
+- {phase_dir}/{plan}-SUMMARY.md
+</files_to_read>
+
+<your_role>
+{specialist-specific role from table below}
+</your_role>
+
+<output_format>
+Return structured findings in this exact format:
+
+## {Specialist Type} Review
+
+### Issues Found
+For each issue:
+- **Severity:** critical | major | minor | suggestion
+- **File:** path/to/file
+- **Line:** line number (if applicable)
+- **Issue:** Description of the problem
+- **Recommendation:** How to fix
+
+### Passed Checks
+- [List of things that look good]
+
+### Summary
+- Total issues: N
+- Critical: N
+- Major: N
+- Minor: N
+- Suggestions: N
+</output_format>
+""",
+  description="{specialist} review for plan {plan_number}"
+)
+```
+
+**8.3 Specialist-specific roles:**
+
+| Specialist | Role Description |
+|------------|------------------|
+| `voltagent-qa-sec:code-reviewer` | Review code quality: patterns, maintainability, DRY principles, complexity, naming conventions, code organization |
+| `voltagent-qa-sec:qa-expert` | Review test coverage: missing tests, edge cases, error handling, input validation, test quality |
+| `voltagent-infra:security-engineer` | Review security: authentication flaws, injection vulnerabilities, hardcoded secrets, OWASP top 10, authorization checks |
+| `voltagent-qa-sec:architect-reviewer` | Review architecture: design patterns, scalability concerns, separation of concerns, API design |
+| `voltagent-core-dev:api-designer` | Review API design: REST conventions, versioning, error responses, documentation |
+
+**8.4 Aggregate specialist findings:**
+
+After all specialists return:
+
+1. **Collect** all issues into single list
+2. **Deduplicate** (same file+line from multiple reviewers)
+3. **Sort** by severity: critical > major > minor > suggestion
+4. **Count** totals by severity
+5. **Record** in VERIFICATION.md under `## Specialist Reviews` section
+
+**Critical/Major issues affect overall verification status:**
+- Any **critical** issue → status: gaps_found
+- 3+ **major** issues → status: gaps_found
+- Minor/suggestions are informational only
+
+## Step 9: Identify Human Verification Needs
 
 **Always needs human:** Visual appearance, user flow completion, real-time behavior, external service integration, performance feel, error message clarity.
 
@@ -310,17 +414,22 @@ Categorize: 🛑 Blocker (prevents goal) | ⚠️ Warning (incomplete) | ℹ️ 
 **Why human:** {Why can't verify programmatically}
 ```
 
-## Step 9: Determine Overall Status
+## Step 10: Determine Overall Status
 
-**Status: passed** — All truths VERIFIED, all artifacts pass levels 1-3, all key links WIRED, no blocker anti-patterns.
+**Status: passed** — All truths VERIFIED, all artifacts pass levels 1-3, all key links WIRED, no blocker anti-patterns, no critical specialist findings.
 
-**Status: gaps_found** — One or more truths FAILED, artifacts MISSING/STUB, key links NOT_WIRED, or blocker anti-patterns found.
+**Status: gaps_found** — One or more truths FAILED, artifacts MISSING/STUB, key links NOT_WIRED, blocker anti-patterns found, OR critical/major specialist findings.
 
 **Status: human_needed** — All automated checks pass but items flagged for human verification.
 
 **Score:** `verified_truths / total_truths`
 
-## Step 10: Structure Gap Output (If Gaps Found)
+**Specialist Impact on Status:**
+- Any **critical** finding from specialists → gaps_found
+- 3+ **major** findings from specialists → gaps_found
+- Minor/suggestions do not block passing
+
+## Step 11: Structure Gap Output (If Gaps Found)
 
 Structure gaps in YAML frontmatter for `/gsd:plan-phase --gaps`:
 
@@ -360,6 +469,16 @@ phase: XX-name
 verified: YYYY-MM-DDTHH:MM:SSZ
 status: passed | gaps_found | human_needed
 score: N/M must-haves verified
+specialist_review: # Only if verification.specialists was in plan
+  tier: 2
+  specialists_run:
+    - voltagent-qa-sec:code-reviewer
+    - voltagent-qa-sec:qa-expert
+  total_issues: 3
+  critical: 0
+  major: 1
+  minor: 2
+  verdict: passed | failed  # failed if critical > 0 or major >= 3
 re_verification: # Only if previous VERIFICATION.md existed
   previous_status: gaps_found
   previous_score: 2/5
@@ -420,6 +539,42 @@ human_verification: # Only if status: human_needed
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
+
+### Specialist Reviews
+
+{Only if verification.specialists defined in plan frontmatter}
+
+#### Code Review (voltagent-qa-sec:code-reviewer)
+- [x] Code patterns: PASSED
+- [x] Maintainability: PASSED
+- [ ] Complexity: N issues found
+
+| Severity | File | Line | Issue | Recommendation |
+|----------|------|------|-------|----------------|
+| minor | src/example.ts | 42 | Function too long | Extract helper function |
+
+#### Security Review (voltagent-infra:security-engineer)
+- [x] Authentication: PASSED
+- [x] Input validation: PASSED
+- [x] No hardcoded secrets: PASSED
+
+#### QA Review (voltagent-qa-sec:qa-expert)
+- [ ] Test coverage: N issues found
+- [x] Error handling: PASSED
+
+| Severity | File | Line | Issue | Recommendation |
+|----------|------|------|-------|----------------|
+| major | src/example.ts | - | Missing unit tests for error paths | Add tests for error scenarios |
+
+#### Specialist Summary
+
+| Category | Status | Issues |
+|----------|--------|--------|
+| Code Quality | PASSED | 2 minor |
+| Security | PASSED | 0 |
+| Test Coverage | 1 major issue | 1 major |
+
+**Specialist Verdict:** PASSED with 3 issues (0 critical, 1 major, 2 minor)
 
 ### Human Verification Required
 
@@ -549,10 +704,13 @@ return <div>No messages</div>  // Always shows "no messages"
 - [ ] All key links verified
 - [ ] Requirements coverage assessed (if applicable)
 - [ ] Anti-patterns scanned and categorized
+- [ ] Verification specialists spawned (if verification.specialists in plan frontmatter)
+- [ ] Specialist findings aggregated and recorded
+- [ ] Critical/major specialist issues factored into status
 - [ ] Human verification items identified
-- [ ] Overall status determined
+- [ ] Overall status determined (including specialist impact)
 - [ ] Gaps structured in YAML frontmatter (if gaps_found)
 - [ ] Re-verification metadata included (if previous existed)
-- [ ] VERIFICATION.md created with complete report
+- [ ] VERIFICATION.md created with complete report (including Specialist Reviews section)
 - [ ] Results returned to orchestrator (NOT committed)
 </success_criteria>

@@ -193,4 +193,86 @@ Squash merge is recommended — keeps main branch history clean while preserving
 
 </branching_strategy_behavior>
 
+<agent_teams_config>
+
+**Agent Teams Configuration:**
+
+Agent Teams enables parallel specialist execution using Claude Code's experimental agent teams feature. When enabled, complex phases spawn specialist teammates that work in parallel with inter-agent coordination.
+
+**Prerequisites:** Set environment variable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings.json or shell.
+
+```json
+"agent_teams": {
+  "enabled": false,
+  "mode": "auto",
+  "min_tasks_for_team": 5,
+  "min_domains_for_team": 2,
+  "teammate_mode": "in-process",
+  "plan_approval_required": ["security", "database", "authentication"],
+  "specialist_model": "sonnet",
+  "fallback_on_failure": true,
+  "max_teammates": 5,
+  "task_timeout_minutes": 10,
+  "stuck_task_threshold_minutes": 5
+}
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable agent teams feature (requires env var) |
+| `mode` | `"auto"` | `"auto"` (detect complexity), `"always"` (force team), `"never"` (force simple) |
+| `min_tasks_for_team` | `5` | Minimum tasks in phase to trigger team mode |
+| `min_domains_for_team` | `2` | Minimum unique domains to trigger team mode |
+| `teammate_mode` | `"in-process"` | Display mode: `"in-process"`, `"tmux"`, `"iterm2"` |
+| `plan_approval_required` | `["security", "database", "authentication"]` | Domains requiring lead approval before changes |
+| `specialist_model` | `"sonnet"` | Model for specialist teammates: `"sonnet"`, `"haiku"`, `"opus"` |
+| `fallback_on_failure` | `true` | Fall back to simple mode if team creation fails |
+| `max_teammates` | `5` | Maximum concurrent specialist teammates |
+| `task_timeout_minutes` | `10` | Timeout for individual task execution |
+| `stuck_task_threshold_minutes` | `5` | Time before lead sends status check message |
+
+**Execution Modes:**
+
+| Mode | Behavior |
+|------|----------|
+| `auto` | Team mode for complex phases (>= min_tasks OR >= min_domains), simple mode otherwise |
+| `always` | Always use team mode regardless of complexity |
+| `never` | Never use team mode (backward compatible, same as `enabled: false`) |
+
+**Team Mode Flow:**
+
+1. `execute-phase` analyzes phase complexity
+2. If team mode triggered: creates team, spawns specialist teammates
+3. Specialists self-claim tasks from shared task list
+4. Lead monitors progress, handles failures, sends messages
+5. Results aggregated into SUMMARY.md
+6. Team cleaned up after phase completion
+
+**Simple Mode Flow:**
+
+Traditional behavior: spawn gsd-executor per plan sequentially.
+
+**Plan Approval Gates:**
+
+When a task's domain matches `plan_approval_required`, the specialist must receive lead approval before making changes. This prevents unauthorized modifications to critical systems.
+
+**Fallback Behavior:**
+
+If `fallback_on_failure: true` and team creation fails, execution falls back to simple mode automatically. Failure scenarios:
+- Agent teams feature not enabled (missing env var)
+- Too many concurrent teams
+- Teammate spawn failures
+
+**Token Economics:**
+
+Team mode uses ~50% more tokens than simple mode but provides:
+- 2-4x faster execution (parallelization)
+- Higher quality (domain expertise)
+- Better coordination (messaging)
+- Reduced failures (self-healing)
+
+Recommended: Use team mode for phases with >5 tasks or >2 domains.
+
+</agent_teams_config>
+
 </planning_config>

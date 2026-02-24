@@ -4,6 +4,15 @@ Complete reference for VoltAgent specialist delegation in GSD.
 
 ## Architecture Overview
 
+### Two Execution Modes
+
+GSD supports two execution modes for specialist delegation:
+
+| Mode | When Used | Token Cost | Coordination |
+|------|-----------|------------|--------------|
+| **Simple Mode** | Sequential tasks, single domain, cost-constrained | ~200k/3 agents | None |
+| **Team Mode** | Complex phases, multi-domain, parallel execution | ~800k/3-person team | Full |
+
 ### Why Orchestrator-Only Delegation
 
 **Architectural Constraint:** The Task() tool is only available to orchestrators (main Claude instance), not to subagents spawned via Task(). This is a fundamental limitation of the multi-agent architecture.
@@ -11,6 +20,175 @@ Complete reference for VoltAgent specialist delegation in GSD.
 **Implication:** Only the execute-phase orchestrator can spawn specialists. Subagents like gsd-executor cannot delegate work to other agents.
 
 **Error Manifestation:** If a subagent attempts Task() invocation, it fails with "classifyHandoffIfNeeded is not defined" or similar errors, as the Task tool is not in their tool manifest.
+
+---
+
+## Agent Teams Mode (New)
+
+Agent Teams is an experimental Claude Code feature that enables true multi-agent coordination with persistent teammates, shared task lists, and inter-agent messaging.
+
+**Prerequisites:**
+1. Set environment variable: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+2. Enable in config: `agent_teams.enabled: true`
+
+### Team Mode Architecture
+
+```
+execute-phase (Team Lead)
+    │
+    ├── TeamCreate("phase-{N}-{slug}")
+    │
+    ├── TaskCreate for each plan task
+    │   └── Include dependencies via addBlockedBy
+    │
+    ├── Spawn specialist teammates
+    │   ├── Task(team_name="...", name="python-specialist", subagent_type="voltagent-lang:python-pro")
+    │   ├── Task(team_name="...", name="db-specialist", subagent_type="voltagent-data-ai:postgres-pro")
+    │   └── ...
+    │
+    ├── Specialists self-claim tasks from shared TaskList
+    │
+    ├── SendMessage for coordination/handoffs
+    │
+    ├── Monitor progress, handle failures
+    │
+    ├── Aggregate results → SUMMARY.md
+    │
+    └── TeamDelete("phase-{N}-{slug}")
+```
+
+### Team Mode Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **True Parallelization** | Multiple specialists work simultaneously |
+| **Domain Expertise** | Right specialist for each task type |
+| **Self-Organization** | Automatic work claiming reduces coordination |
+| **Inter-Agent Communication** | Messaging enables handoffs and clarifications |
+| **Plan Approval Gates** | Critical tasks require lead approval |
+
+### Team Mode Configuration
+
+**File:** `.planning/config.json`
+
+```json
+"agent_teams": {
+  "enabled": false,
+  "mode": "auto",
+  "min_tasks_for_team": 5,
+  "min_domains_for_team": 2,
+  "teammate_mode": "in-process",
+  "plan_approval_required": ["security", "database", "authentication"],
+  "specialist_model": "sonnet",
+  "fallback_on_failure": true,
+  "max_teammates": 5,
+  "task_timeout_minutes": 10,
+  "stuck_task_threshold_minutes": 5
+}
+```
+
+### Complexity Detection
+
+Team mode triggers when:
+- `mode: "always"` is set, OR
+- `mode: "auto"` AND (task_count >= min_tasks_for_team OR unique_domains >= min_domains_for_team)
+
+```bash
+determine_execution_mode() {
+  local task_count=$1
+  local domain_count=$2
+  local config_mode=$3
+
+  if [ "$config_mode" = "always" ]; then
+    echo "team"
+  elif [ "$config_mode" = "never" ]; then
+    echo "simple"
+  elif [ "$task_count" -ge "$MIN_TASKS" ] || [ "$domain_count" -ge "$MIN_DOMAINS" ]; then
+    echo "team"
+  else
+    echo "simple"
+  fi
+}
+```
+
+### Team Mode Task Flow
+
+1. **Team Creation:**
+   ```
+   TeamCreate(
+     team_name="phase-{phase_number}-{phase_slug}",
+     description="Execute {phase_name}"
+   )
+   ```
+
+2. **Task Creation:**
+   ```
+   For each task in plan:
+     TaskCreate(
+       subject="{task.name}",
+       description="Plan: {plan_id}\nAction: {task.action}\nFiles: {task.files}",
+       team_name="phase-{phase_number}-{phase_slug}"
+     )
+
+     # Add dependencies
+     TaskUpdate(taskId={id}, addBlockedBy=[{dependency_ids}])
+   ```
+
+3. **Specialist Spawning:**
+   ```
+   For each unique domain:
+     Task(
+       team_name="phase-{phase_number}-{phase_slug}",
+       name="{domain}-specialist",
+       subagent_type="{domain}",
+       prompt="Check TaskList, claim matching tasks, execute, commit."
+     )
+   ```
+
+4. **Progress Monitoring:**
+   ```
+   while tasks_remaining > 0:
+     status = TaskList(team_name="...")
+
+     # Check for stuck tasks
+     for task in status where duration > stuck_threshold:
+       SendMessage(to=task.owner, content="Status check?")
+
+     sleep(30)
+   ```
+
+5. **Result Aggregation:**
+   ```
+   results = TaskList(team_name="...", filter="completed")
+   write_summary(results)
+   TeamDelete(team_name="...")
+   ```
+
+### Plan Approval Gates
+
+Critical domains require lead approval before specialists make changes:
+
+```json
+"plan_approval_required": ["security", "database", "authentication"]
+```
+
+**Flow:**
+1. Specialist claims task in critical domain
+2. Specialist enters plan mode (read-only)
+3. Specialist proposes changes via SendMessage
+4. Lead reviews and approves/rejects
+5. Specialist proceeds only if approved
+
+### Fallback Behavior
+
+If `fallback_on_failure: true` and team creation fails:
+1. Log warning
+2. Fall back to simple mode (gsd-executor per plan)
+3. Execution continues without team features
+
+---
+
+## Simple Mode (Current Default)
 
 ### Delegation Flow
 

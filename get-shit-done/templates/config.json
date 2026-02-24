@@ -20,6 +20,19 @@
     "max_concurrent_agents": 3,
     "min_plans_for_parallel": 2
   },
+  "agent_teams": {
+    "enabled": false,
+    "mode": "auto",
+    "min_tasks_for_team": 5,
+    "min_domains_for_team": 2,
+    "teammate_mode": "in-process",
+    "plan_approval_required": ["security", "database", "authentication"],
+    "specialist_model": "sonnet",
+    "fallback_on_failure": true,
+    "max_teammates": 5,
+    "task_timeout_minutes": 10,
+    "stuck_task_threshold_minutes": 5
+  },
   "gates": {
     "confirm_project": true,
     "confirm_phases": true,

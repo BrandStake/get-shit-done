@@ -36,6 +36,412 @@ node ~/.claude/get-shit-done/bin/gsd-tools.cjs agents enumerate --output .planni
 This creates an up-to-date roster of available VoltAgent specialists, excluding GSD system agents (gsd-*). The roster is used for specialist validation before spawning.
 </step>
 
+<step name="determine_execution_mode">
+Analyze phase complexity to determine team mode vs simple mode execution.
+
+**Load agent teams configuration:**
+
+```bash
+# Check if agent teams feature is enabled
+AGENT_TEAMS_ENABLED=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.enabled 2>/dev/null || echo "false")
+AGENT_TEAMS_MODE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.mode 2>/dev/null || echo "auto")
+MIN_TASKS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_tasks_for_team 2>/dev/null || echo "5")
+MIN_DOMAINS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_domains_for_team 2>/dev/null || echo "2")
+FALLBACK_ON_FAILURE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.fallback_on_failure 2>/dev/null || echo "true")
+```
+
+**Analyze phase complexity:**
+
+```bash
+# Get complexity analysis from gsd-tools
+COMPLEXITY=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs phase analyze-complexity "${PHASE_NUMBER}" 2>/dev/null || echo '{"mode":"simple","reason":"analysis_failed"}')
+
+TOTAL_TASKS=$(echo "$COMPLEXITY" | jq -r '.task_count // 0')
+UNIQUE_DOMAINS=$(echo "$COMPLEXITY" | jq -r '.domains | length // 0')
+HAS_PARALLEL_WAVES=$(echo "$COMPLEXITY" | jq -r '.has_parallel_waves // false')
+COMPLEXITY_DOMAINS=$(echo "$COMPLEXITY" | jq -r '.domains | join(", ") // "none"')
+```
+
+**Determine execution mode:**
+
+```bash
+determine_execution_mode() {
+  # If agent teams disabled globally, use simple mode
+  if [ "$AGENT_TEAMS_ENABLED" != "true" ]; then
+    echo "simple"
+    echo "Reason: agent_teams.enabled is false" >&2
+    return
+  fi
+
+  # Check explicit mode setting
+  if [ "$AGENT_TEAMS_MODE" = "always" ]; then
+    echo "team"
+    echo "Reason: agent_teams.mode is 'always'" >&2
+    return
+  fi
+
+  if [ "$AGENT_TEAMS_MODE" = "never" ]; then
+    echo "simple"
+    echo "Reason: agent_teams.mode is 'never'" >&2
+    return
+  fi
+
+  # Auto mode: check complexity thresholds
+  if [ "$TOTAL_TASKS" -ge "$MIN_TASKS_FOR_TEAM" ]; then
+    echo "team"
+    echo "Reason: task_count ($TOTAL_TASKS) >= min_tasks_for_team ($MIN_TASKS_FOR_TEAM)" >&2
+    return
+  fi
+
+  if [ "$UNIQUE_DOMAINS" -ge "$MIN_DOMAINS_FOR_TEAM" ]; then
+    echo "team"
+    echo "Reason: unique_domains ($UNIQUE_DOMAINS) >= min_domains_for_team ($MIN_DOMAINS_FOR_TEAM)" >&2
+    return
+  fi
+
+  # Default to simple mode
+  echo "simple"
+  echo "Reason: complexity below thresholds (tasks=$TOTAL_TASKS, domains=$UNIQUE_DOMAINS)" >&2
+}
+
+EXECUTION_MODE=$(determine_execution_mode)
+```
+
+**Report execution mode:**
+
+```
+---
+## Execution Mode: ${EXECUTION_MODE}
+
+**Analysis:**
+- Total tasks: ${TOTAL_TASKS}
+- Unique domains: ${UNIQUE_DOMAINS} (${COMPLEXITY_DOMAINS})
+- Has parallel waves: ${HAS_PARALLEL_WAVES}
+
+${if EXECUTION_MODE == "team"}
+Using **Team Mode** for parallel specialist execution.
+Specialists will self-claim tasks from shared task list.
+${else}
+Using **Simple Mode** for sequential execution.
+Plans executed by gsd-executor via Task tool.
+${fi}
+---
+```
+
+**Branch to appropriate execution flow:**
+
+- If `EXECUTION_MODE == "team"` → proceed to `team_mode_execution` step
+- If `EXECUTION_MODE == "simple"` → proceed to `handle_branching` step (existing flow)
+
+</step>
+
+<step name="team_mode_execution" conditional="EXECUTION_MODE == team">
+Execute phase using Agent Teams for parallel specialist coordination.
+
+**Prerequisites:** Claude Code agent teams feature must be enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` environment variable.
+
+**1. Create team for phase:**
+
+```bash
+TEAM_NAME="phase-${PHASE_NUMBER}-${PHASE_SLUG}"
+TEAM_DESCRIPTION="Execute phase ${PHASE_NUMBER}: ${PHASE_NAME}"
+```
+
+```
+TeamCreate(
+  team_name="${TEAM_NAME}",
+  description="${TEAM_DESCRIPTION}"
+)
+```
+
+**If TeamCreate fails:**
+- Log warning: "Team creation failed, falling back to simple mode"
+- If `FALLBACK_ON_FAILURE == "true"` → jump to `execute_waves` (simple mode)
+- If `FALLBACK_ON_FAILURE == "false"` → error and stop
+
+**2. Convert plan tasks to team tasks:**
+
+For each incomplete plan in the phase:
+
+```bash
+# Parse plan file and extract tasks
+PLAN_TASKS=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs plan to-team-tasks "${PLAN_PATH}" 2>/dev/null)
+TASK_IDS=()
+
+# Create team task for each plan task
+echo "$PLAN_TASKS" | jq -c '.[]' | while read -r TASK_JSON; do
+  TASK_NAME=$(echo "$TASK_JSON" | jq -r '.name')
+  TASK_DESC=$(echo "$TASK_JSON" | jq -r '.description')
+  TASK_DOMAIN=$(echo "$TASK_JSON" | jq -r '.domain // "gsd-executor"')
+  TASK_DEPENDS=$(echo "$TASK_JSON" | jq -r '.depends_on | join(",") // ""')
+  TASK_PLAN_ID=$(echo "$TASK_JSON" | jq -r '.plan_id')
+
+  # Create task in team
+  TASK_RESULT=$(TaskCreate(
+    subject="${TASK_PLAN_ID}: ${TASK_NAME}",
+    description="
+Plan: ${TASK_PLAN_ID}
+Domain: ${TASK_DOMAIN}
+Action: ${TASK_DESC}
+
+GSD Execution Rules:
+- Commit atomically with conventional format
+- DO NOT modify STATE.md, ROADMAP.md (lead handles)
+- Return structured result: files_modified, verification_status, commit_hash
+- Apply deviation rules 1-4 as needed
+",
+    team_name="${TEAM_NAME}"
+  ))
+
+  TASK_ID=$(echo "$TASK_RESULT" | jq -r '.taskId')
+  TASK_IDS+=("$TASK_ID")
+
+  # Add dependencies if any
+  if [ -n "$TASK_DEPENDS" ]; then
+    # Map plan task dependencies to team task IDs
+    # (requires tracking mapping from plan task -> team task ID)
+    TaskUpdate(
+      taskId="${TASK_ID}",
+      addBlockedBy=[${DEPENDENCY_TASK_IDS}]
+    )
+  fi
+done
+```
+
+**3. Determine and spawn specialist teammates:**
+
+```bash
+# Get unique domains from complexity analysis
+DOMAINS=$(echo "$COMPLEXITY" | jq -r '.domains[]' 2>/dev/null)
+TEAMMATE_COUNT=0
+MAX_TEAMMATES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.max_teammates 2>/dev/null || echo "5")
+SPECIALIST_MODEL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.specialist_model 2>/dev/null || echo "sonnet")
+
+echo "Spawning specialist teammates for domains: ${DOMAINS}"
+
+for DOMAIN in $DOMAINS; do
+  if [ "$TEAMMATE_COUNT" -ge "$MAX_TEAMMATES" ]; then
+    echo "Warning: Reached max_teammates limit ($MAX_TEAMMATES), remaining domains will use gsd-executor"
+    break
+  fi
+
+  # Map domain to VoltAgent specialist
+  SPECIALIST_NAME=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs task detect-domain --domain "$DOMAIN" --raw | jq -r '.specialist // "gsd-executor"')
+
+  # Check specialist availability
+  if ! grep -q "${SPECIALIST_NAME}" .planning/available_agents.md 2>/dev/null; then
+    echo "Warning: ${SPECIALIST_NAME} not available, using gsd-executor for ${DOMAIN} tasks"
+    SPECIALIST_NAME="gsd-executor"
+  fi
+
+  echo "Spawning ${SPECIALIST_NAME} for ${DOMAIN} tasks..."
+
+  Task(
+    team_name="${TEAM_NAME}",
+    name="${DOMAIN}-specialist",
+    subagent_type="${SPECIALIST_NAME}",
+    model="${SPECIALIST_MODEL}",
+    prompt="
+You are a specialist teammate in the GSD execution team for phase ${PHASE_NUMBER}.
+
+**Your domain:** ${DOMAIN}
+**Team:** ${TEAM_NAME}
+
+## Instructions
+
+1. **Check TaskList** for unblocked tasks matching your domain
+2. **Claim task** via TaskUpdate(taskId=X, status='in_progress')
+3. **Execute the task** following GSD execution rules:
+   - Read task files using Read tool
+   - Implement changes following project conventions (check CLAUDE.md if exists)
+   - Run verification commands from task description
+   - Commit atomically: git add [files] && git commit -m 'feat(\${plan_id}): \${description}'
+4. **Mark complete** via TaskUpdate(taskId=X, status='completed', notes='commit_hash: abc123')
+5. **Check for more tasks** matching your domain, repeat
+6. **Go idle** when no more tasks match your domain
+
+## GSD Execution Rules
+
+- **Atomic commits:** One commit per task, conventional format
+- **Deviation rules:** Auto-fix bugs (Rule 1), missing critical (Rule 2), blockers (Rule 3). Stop for architectural changes (Rule 4).
+- **State files:** DO NOT modify STATE.md, ROADMAP.md, REQUIREMENTS.md - return structured output instead
+- **Return format:** Include files_modified, verification_status, commit_hash in task notes
+
+## Domain Keywords
+
+Match tasks containing: ${DOMAIN}
+
+## Context Files
+
+Read these as needed:
+- ./CLAUDE.md (project conventions)
+- .agents/skills/ (project skills)
+- Task-specific files from task description
+"
+  )
+
+  TEAMMATE_COUNT=$((TEAMMATE_COUNT + 1))
+done
+
+# Always spawn gsd-executor as fallback for unclaimed tasks
+echo "Spawning gsd-executor for fallback/general tasks..."
+
+Task(
+  team_name="${TEAM_NAME}",
+  name="general-executor",
+  subagent_type="gsd-executor",
+  model="${SPECIALIST_MODEL}",
+  prompt="
+You are the general executor in the GSD execution team for phase ${PHASE_NUMBER}.
+
+**Your role:** Handle tasks not claimed by domain specialists
+**Team:** ${TEAM_NAME}
+
+## Instructions
+
+1. **Wait 30 seconds** for specialists to claim domain-specific tasks
+2. **Check TaskList** for remaining unblocked, unclaimed tasks
+3. **Claim and execute** tasks following GSD execution rules
+4. **Mark complete** with structured notes
+5. **Repeat** until no tasks remain
+
+## GSD Execution Rules
+
+(Same as specialist teammates)
+"
+)
+```
+
+**4. Monitor team progress:**
+
+```bash
+TASK_TIMEOUT_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.task_timeout_minutes 2>/dev/null || echo "10")
+STUCK_THRESHOLD_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.stuck_task_threshold_minutes 2>/dev/null || echo "5")
+POLL_INTERVAL=30  # seconds
+
+echo "Monitoring team progress..."
+
+while true; do
+  # Get current task list status
+  TASK_STATUS=$(TaskList(team_name="${TEAM_NAME}"))
+
+  # Count task statuses
+  TOTAL=$(echo "$TASK_STATUS" | jq 'length')
+  COMPLETED=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "completed")] | length')
+  IN_PROGRESS=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "in_progress")] | length')
+  PENDING=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "pending")] | length')
+
+  echo "Progress: ${COMPLETED}/${TOTAL} complete, ${IN_PROGRESS} in progress, ${PENDING} pending"
+
+  # Check if all tasks complete
+  if [ "$COMPLETED" -eq "$TOTAL" ]; then
+    echo "All tasks complete!"
+    break
+  fi
+
+  # Check for stuck tasks
+  echo "$TASK_STATUS" | jq -c '.[] | select(.status == "in_progress")' | while read -r TASK; do
+    TASK_ID=$(echo "$TASK" | jq -r '.taskId')
+    TASK_OWNER=$(echo "$TASK" | jq -r '.owner // "unknown"')
+    TASK_START=$(echo "$TASK" | jq -r '.startedAt // ""')
+
+    if [ -n "$TASK_START" ]; then
+      # Calculate duration (simplified - real implementation would use proper date math)
+      DURATION_MINUTES=$(( ($(date +%s) - $(date -d "$TASK_START" +%s 2>/dev/null || echo "0")) / 60 ))
+
+      if [ "$DURATION_MINUTES" -ge "$STUCK_THRESHOLD_MINUTES" ]; then
+        echo "Warning: Task ${TASK_ID} stuck for ${DURATION_MINUTES} minutes"
+        SendMessage(
+          to="${TASK_OWNER}",
+          type="message",
+          content="Status check: Task ${TASK_ID} has been in progress for ${DURATION_MINUTES} minutes. Are you blocked? If so, please update task notes with blocker details."
+        )
+      fi
+
+      if [ "$DURATION_MINUTES" -ge "$TASK_TIMEOUT_MINUTES" ]; then
+        echo "Error: Task ${TASK_ID} exceeded timeout (${TASK_TIMEOUT_MINUTES} minutes)"
+        # Mark task as failed, will be picked up by gsd-executor fallback
+        TaskUpdate(
+          taskId="${TASK_ID}",
+          status="pending",
+          notes="Timeout - reassigned for retry"
+        )
+      fi
+    fi
+  done
+
+  # Check for failures
+  FAILED=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "failed")] | length')
+  if [ "$FAILED" -gt 0 ]; then
+    echo "Warning: ${FAILED} task(s) failed"
+    # Failed tasks stay in list for retry by gsd-executor
+  fi
+
+  sleep $POLL_INTERVAL
+done
+```
+
+**5. Aggregate results and create SUMMARY.md files:**
+
+```bash
+echo "Aggregating team results..."
+
+# Get all completed tasks with their results
+COMPLETED_TASKS=$(TaskList(team_name="${TEAM_NAME}") | jq '[.[] | select(.status == "completed")]')
+
+# Group by plan
+PLANS=$(echo "$COMPLETED_TASKS" | jq -r '.[].subject | split(":")[0]' | sort -u)
+
+for PLAN_ID in $PLANS; do
+  PLAN_TASKS=$(echo "$COMPLETED_TASKS" | jq --arg plan "$PLAN_ID" '[.[] | select(.subject | startswith($plan))]')
+
+  # Extract results from task notes
+  FILES_MODIFIED=$(echo "$PLAN_TASKS" | jq -r '.[].notes' | grep -o 'files_modified: \[[^]]*\]' | sed 's/files_modified: //' | jq -s 'add | unique')
+  COMMIT_HASHES=$(echo "$PLAN_TASKS" | jq -r '.[].notes' | grep -o 'commit_hash: [a-f0-9]*' | sed 's/commit_hash: //' | tr '\n' ', ')
+  SPECIALISTS_USED=$(echo "$PLAN_TASKS" | jq -r '.[].owner' | sort -u | tr '\n' ', ')
+
+  # Create SUMMARY.md for this plan
+  PLAN_DIR=$(dirname $(find .planning/phases -name "${PLAN_ID}-PLAN.md" 2>/dev/null | head -1))
+
+  if [ -n "$PLAN_DIR" ]; then
+    node ~/.claude/get-shit-done/bin/gsd-tools.cjs team aggregate-results \
+      --team "${TEAM_NAME}" \
+      --plan "${PLAN_ID}" \
+      --output "${PLAN_DIR}/${PLAN_ID}-SUMMARY.md"
+  fi
+done
+```
+
+**6. Request teammate shutdown and cleanup:**
+
+```bash
+echo "Requesting teammate shutdown..."
+
+# Send shutdown request to all teammates
+for TEAMMATE in "${TEAMMATES[@]}"; do
+  SendMessage(
+    to="${TEAMMATE}",
+    type="shutdown_request",
+    content="Phase execution complete. Please finish any in-progress work and shut down."
+  )
+done
+
+# Wait briefly for graceful shutdown
+sleep 10
+
+# Delete team
+echo "Cleaning up team..."
+TeamDelete(team_name="${TEAM_NAME}")
+
+echo "Team mode execution complete."
+```
+
+**7. Proceed to verification:**
+
+After team mode completes, continue to `verify_phase_goal` step (same as simple mode).
+
+</step>
+
 <step name="handle_branching">
 Check `branching_strategy` from init:
 

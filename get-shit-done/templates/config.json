@@ -1,6 +1,7 @@
 {
-  "mode": "interactive",
-  "depth": "standard",
+  "model_profile": "quality",
+  "mode": "yolo",
+  "depth": "comprehensive",
   "workflow": {
     "research": true,
     "plan_check": true,
@@ -22,12 +23,12 @@
   },
   "agent_teams": {
     "enabled": true,
-    "mode": "auto",
+    "mode": "always",
     "min_tasks_for_team": 5,
     "min_domains_for_team": 2,
     "teammate_mode": "in-process",
     "plan_approval_required": ["security", "database", "authentication"],
-    "specialist_model": "sonnet",
+    "specialist_model": "opus",
     "fallback_on_failure": true,
     "max_teammates": 5,
     "task_timeout_minutes": 10,
@@ -46,5 +47,15 @@
   "safety": {
     "always_confirm_destructive": true,
     "always_confirm_external_services": true
+  },
+  "verification": {
+    "enabled": true,
+    "default_tier": 2,
+    "tier_overrides": {
+      "auth": 3,
+      "payments": 3,
+      "database": 3,
+      "security": 3
+    }
   }
 }

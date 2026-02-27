@@ -166,6 +166,18 @@ If "Cancel": Exit workflow.
 **If `has_plans` is false:** Continue to analyze_phase.
 </step>
 
+<step name="check_self_discussion_mode">
+**Check if self-discussion mode is enabled:**
+
+```bash
+SELF_DISCUSSION=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.self_discussion --raw 2>/dev/null || echo "false")
+SELF_DISCUSSION_ROUNDS=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.self_discussion_rounds --raw 2>/dev/null || echo "3")
+```
+
+- **If SELF_DISCUSSION=true:** Route to `self_discuss_areas` after `analyze_phase` (skip interactive `present_gray_areas` and `discuss_areas`)
+- **If SELF_DISCUSSION=false:** Use normal interactive flow (`present_gray_areas` → `discuss_areas`)
+</step>
+
 <step name="analyze_phase">
 Analyze the phase to identify gray areas worth discussing.
 
@@ -189,6 +201,209 @@ Gray areas:
 - Empty State: What shows when no posts exist
 - Content: What metadata displays (time, author, reactions count)
 ```
+
+**Routing based on self_discussion mode:**
+- **If SELF_DISCUSSION=true:** Proceed to `self_discuss_areas`
+- **If SELF_DISCUSSION=false:** Proceed to `present_gray_areas`
+</step>
+
+<step name="self_discuss_areas" conditional="SELF_DISCUSSION=true">
+**CRITICAL: You MUST execute ALL of the following steps. This is autonomous self-discussion mode. Do NOT ask the user anything. Do NOT use AskUserQuestion.**
+
+**Step 1. REQUIRED - Display self-discussion banner:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► SELF-DISCUSSION MODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Phase {phase_number}: {phase_name}
+Gray Areas: {count} identified
+Discussion Rounds: {SELF_DISCUSSION_ROUNDS} per topic
+
+Spawning architect experts for autonomous discussion...
+```
+
+**Step 2. REQUIRED - For EACH gray area, spawn an architect-reviewer agent:**
+
+You MUST process ALL gray areas identified in analyze_phase. Do NOT skip any.
+
+For each gray area, spawn an expert agent:
+
+```
+Task(
+  subagent_type="voltagent-qa-sec:architect-reviewer",
+  model="sonnet",
+  prompt="""
+You are a complex systems architect reviewing implementation decisions for Phase {phase_number}: {phase_name}.
+
+<context>
+**Domain:** {domain_boundary}
+**Gray Area:** {gray_area_name}
+**Questions to resolve:** {gray_area_questions}
+
+<files_to_read>
+- .planning/ROADMAP.md (phase goals)
+- .planning/PROJECT.md (project context)
+- .planning/STATE.md (current state)
+</files_to_read>
+</context>
+
+<your_role>
+You are acting as a domain expert and complex systems architect. Your job is to:
+1. Consider this gray area deeply
+2. Evaluate trade-offs between different approaches
+3. Make concrete recommendations based on:
+   - Scalability implications
+   - Maintainability concerns
+   - User experience impact
+   - Implementation complexity
+   - Industry best practices
+</your_role>
+
+<discussion_process>
+You MUST conduct {SELF_DISCUSSION_ROUNDS} rounds of deeper questioning:
+
+**Round 1 - Initial Analysis:**
+- What are the 2-3 main approaches for {gray_area_name}?
+- What are the trade-offs of each?
+- What questions does this raise?
+
+**Round 2 - Deeper Investigation:**
+- Based on Round 1, what edge cases need consideration?
+- How do different approaches affect other system components?
+- What are the long-term implications?
+
+**Round 3 - Final Recommendation:**
+- Given the analysis, what is the recommended approach?
+- What is the rationale?
+- What should be left to Claude's discretion during implementation?
+
+{If SELF_DISCUSSION_ROUNDS > 3, continue with additional rounds exploring implementation details, error handling, and future extensibility}
+</discussion_process>
+
+<output_format>
+Return a structured decision for this gray area:
+
+## {gray_area_name}
+
+### Analysis Summary
+[2-3 sentence summary of the key considerations]
+
+### Recommendation
+**Approach:** [Concrete recommendation]
+**Rationale:** [Why this approach]
+
+### Implementation Notes
+- [Key point for planner]
+- [Key point for planner]
+
+### Claude's Discretion
+[What can be left to implementation-time decisions]
+
+### Trade-offs Accepted
+[What we're giving up with this choice]
+</output_format>
+""",
+  description="Architect analysis: {gray_area_name}"
+)
+```
+
+**Step 3. REQUIRED - Spawn agents in PARALLEL for efficiency:**
+
+You MUST spawn all architect agents simultaneously (one per gray area). Do NOT spawn sequentially.
+
+Example for 4 gray areas:
+```
+# Spawn all 4 agents in parallel in a single message
+Task(...gray_area_1...)
+Task(...gray_area_2...)
+Task(...gray_area_3...)
+Task(...gray_area_4...)
+```
+
+**Step 4. REQUIRED - Collect all responses:**
+
+Wait for ALL agents to complete. Do NOT proceed until every agent has returned.
+
+**Step 5. REQUIRED - Synthesize into CONTEXT.md format:**
+
+Combine all architect recommendations into the decisions structure:
+
+```markdown
+# Phase [X]: [Name] - Context
+
+**Gathered:** [date]
+**Status:** Ready for planning
+**Mode:** Self-discussion (autonomous)
+
+<domain>
+## Phase Boundary
+
+[Domain boundary from analyze_phase]
+
+</domain>
+
+<decisions>
+## Implementation Decisions
+
+{For each gray area, include the architect's recommendation:}
+
+### {Gray Area 1}
+**Decision:** {recommendation}
+**Rationale:** {rationale}
+- {implementation note}
+- {implementation note}
+
+### {Gray Area 2}
+**Decision:** {recommendation}
+**Rationale:** {rationale}
+- {implementation note}
+
+### Claude's Discretion
+{Aggregate all "Claude's Discretion" items from architects}
+
+</decisions>
+
+<analysis>
+## Architect Analysis
+
+{Include key insights and trade-offs from each architect agent}
+
+### {Gray Area 1} - Trade-offs
+{trade-offs accepted}
+
+### {Gray Area 2} - Trade-offs
+{trade-offs accepted}
+
+</analysis>
+
+<specifics>
+## Specific Requirements
+
+{Any specific implementation requirements identified by architects}
+
+</specifics>
+
+<deferred>
+## Deferred Ideas
+
+None — self-discussion stayed within phase scope
+
+</deferred>
+
+---
+
+*Phase: XX-name*
+*Context gathered: [date]*
+*Mode: Self-discussion with {N} architect agents, {SELF_DISCUSSION_ROUNDS} rounds each*
+```
+
+**Step 6. REQUIRED - Proceed to write_context:**
+
+After synthesis is complete, proceed directly to `write_context` step with the synthesized content.
+
+Do NOT proceed to `present_gray_areas` or `discuss_areas` — those are for interactive mode only.
 </step>
 
 <step name="present_gray_areas">

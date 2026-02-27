@@ -28,6 +28,17 @@ INIT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs init verify-work "${PHASE_
 ```
 
 Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `has_verification`.
+
+**Parse `--auto` flag:**
+
+```bash
+AUTO_MODE=false
+if [[ "$ARGUMENTS" == *"--auto"* ]]; then
+  AUTO_MODE=true
+fi
+```
+
+When AUTO_MODE=true, skip manual testing (present_test, process_response) and use automated_testing instead.
 </step>
 
 <step name="check_active_session">
@@ -125,6 +136,7 @@ Create file:
 ---
 status: testing
 phase: XX-name
+mode: [manual | auto]  # Set based on AUTO_MODE flag
 source: [list of SUMMARY.md files]
 started: [ISO timestamp]
 updated: [ISO timestamp]
@@ -166,10 +178,121 @@ skipped: 0
 
 Write to `.planning/phases/XX-name/{phase_num}-UAT.md`
 
-Proceed to `present_test`.
+**If AUTO_MODE=true:** Proceed to `automated_testing`
+**If AUTO_MODE=false:** Proceed to `present_test`
+</step>
+
+<step name="automated_testing" conditional="AUTO_MODE=true">
+**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip any step. Do NOT proceed to `complete_session` until all steps finish.**
+
+**Step 1. REQUIRED - Check agent teams config:**
+
+You MUST run this command first:
+```bash
+AGENT_TEAMS_ENABLED=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.enabled --raw 2>/dev/null || echo "false")
+MAX_TESTERS=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.max_teammates --raw 2>/dev/null || echo "4")
+SPECIALIST_MODEL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.specialist_model --raw 2>/dev/null || echo "sonnet")
+```
+
+**If AGENT_TEAMS_ENABLED=false:**
+```
+Agent teams not enabled. Run /gsd:settings to enable agent_teams.
+
+Falling back to manual verification...
+```
+You MUST proceed to `present_test` instead. Do NOT continue with automated testing.
+
+**Step 2. REQUIRED - Create verification team:**
+
+You MUST create the team before spawning any agents:
+```
+TeamCreate(
+  team_name="verify-{phase_number}",
+  description="Automated UAT for phase {phase_number}"
+)
+```
+
+**Step 3. REQUIRED - Create tasks for each test:**
+
+For EACH test extracted from SUMMARY.md, you MUST create a task:
+```
+TaskCreate(
+  subject="Test: {test_name}",
+  description="""
+  **Expected:** {expected}
+  **Files:** {relevant files from SUMMARY.md}
+
+  Verify this behavior is correctly implemented.
+  Return: PASS, FAIL (with reason), or SKIP (if can't test automatically)
+  """,
+  activeForm="Testing {test_name}"
+)
+```
+
+Do NOT skip any tests. Every test from SUMMARY.md MUST have a corresponding task.
+
+**Step 4. REQUIRED - Spawn test agents as teammates:**
+
+**Step 4a.** Determine agent type based on test characteristics:
+- Contains "API", "endpoint", "request" → `backend-developer`
+- Contains "UI", "component", "display", "render" → `voltagent-qa-sec:qa-expert`
+- Contains "flow", "integration", "end-to-end" → `gsd-integration-checker`
+- Default → `voltagent-qa-sec:qa-expert`
+
+**Step 4b.** You MUST spawn agents in parallel (up to MAX_TESTERS concurrent):
+```
+Task(
+  team_name="verify-{phase_number}",
+  name="tester-{N}",
+  subagent_type="{appropriate_agent}",
+  model="{SPECIALIST_MODEL}",
+  prompt="""
+You are a test agent on team verify-{phase_number}.
+
+<instructions>
+1. Check TaskList for available test tasks
+2. Claim a task (TaskUpdate with owner)
+3. Read the relevant files
+4. Verify the expected behavior
+5. Update task with result:
+   - PASS: Mark completed, add "PASS: [brief confirmation]" to description
+   - FAIL: Mark completed, add "FAIL: [what's wrong]" to description
+   - SKIP: Mark completed, add "SKIP: [reason]" to description
+6. Repeat until no tasks remain
+7. Send message to orchestrator when done
+</instructions>
+  """,
+  description="Test agent {N} for phase {phase_number}"
+)
+```
+
+**Step 5. REQUIRED - Monitor team completion:**
+
+You MUST wait for ALL test tasks to be completed. Use SendMessage to coordinate. Do NOT proceed until every task has status `completed`.
+
+**Step 6. REQUIRED - Collect results and update UAT.md:**
+
+For EACH completed task, you MUST:
+- Parse result from task description (PASS/FAIL/SKIP)
+- Map to UAT format (pass/issue/skipped)
+- If FAIL: extract reason, infer severity using severity_inference rules
+- Update UAT.md Tests section with result
+
+Do NOT skip any task results. Every task MUST be recorded in UAT.md.
+
+**Step 7. REQUIRED - Cleanup team:**
+
+You MUST delete the team after collecting all results:
+```
+TeamDelete(team_name="verify-{phase_number}")
+```
+
+**Step 8.** Proceed to `complete_session` (which handles specialist verification)
 </step>
 
 <step name="present_test">
+**If AUTO_MODE=true:** Skip this step — automated_testing already handled verification. Proceed directly to `complete_session`.
+
 **Present current test to user:**
 
 Read Current Test section from UAT file.
@@ -591,9 +714,149 @@ Spawning parallel debug agents to investigate each issue.
 - Spawn parallel debug agents for each issue
 - Collect root causes
 - Update UAT.md with root causes
-- Proceed to `plan_gap_closure`
+
+**After diagnosis, check routing:**
+
+```bash
+AUTO_INSERT_PHASES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_insert_fix_phases --raw 2>/dev/null || echo "false")
+```
+
+- **If AUTO_INSERT_PHASES=true:** Proceed to `auto_insert_fix_phases`
+- **If AUTO_INSERT_PHASES=false:** Proceed to `plan_gap_closure`
 
 Diagnosis runs automatically - no user prompt. Parallel agents investigate simultaneously, so overhead is minimal and fixes are more accurate.
+</step>
+
+<step name="auto_insert_fix_phases" conditional="AUTO_INSERT_PHASES=true">
+**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip any step. Do NOT proceed to next steps until each step completes.**
+
+This step enables fully autonomous fix cycles. Instead of planning fixes within the current phase, we create new phases for each fix, allowing them to go through the standard plan→execute→verify cycle.
+
+**Step 1. REQUIRED - Display status:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► AUTO-INSERTING FIX PHASES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Creating fix phases from diagnosed gaps...
+```
+
+**Step 2. REQUIRED - Read diagnosed gaps from UAT.md:**
+
+You MUST read the UAT file and parse the Gaps section:
+```bash
+cat "${phase_dir}/${phase_num}-UAT.md"
+```
+
+Extract each gap's: `truth`, `reason`, `severity`, `root_cause`, `artifacts`, `missing`
+
+**Step 3. REQUIRED - Group gaps into logical fix phases:**
+
+You MUST group gaps using these rules:
+- Same affected file/component → combine into one fix phase
+- Same subsystem (auth, API, UI) → combine
+- Dependency order (fix stubs before wiring)
+- Keep phases focused: 1-3 gaps each
+
+Do NOT create one phase per gap unless gaps are completely unrelated.
+
+**Step 4. REQUIRED - Create fix phases:**
+
+For EACH grouped fix phase, you MUST run:
+
+**Step 4a.** Generate descriptive name from gaps:
+```bash
+FIX_NAME="Fix: {primary issue summary}"
+```
+
+**Step 4b.** Insert as decimal phase after current phase - REQUIRED:
+```bash
+RESULT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs phase insert "${phase_number}" "${FIX_NAME}")
+```
+
+**Step 4c.** Extract from result: `new_phase_number`, `directory`, `slug`
+
+**Step 5. REQUIRED - Create GAPS.md for each new fix phase:**
+
+For EACH new fix phase directory, you MUST write a context file:
+
+```bash
+cat > "${directory}/GAPS.md" << 'EOF'
+---
+source_phase: {phase_number}
+source_uat: {phase_dir}/{phase_num}-UAT.md
+created: {timestamp}
+---
+
+## Gaps to Close
+
+### Gap {N}: {truth}
+
+**Severity:** {severity}
+**Root Cause:** {root_cause}
+**Reported:** {reason}
+
+**Artifacts:**
+{list artifacts}
+
+**Missing:**
+{list missing items}
+EOF
+```
+
+Do NOT skip this step. The GAPS.md file is consumed by `/gsd:plan-phase` to understand what to fix.
+
+**Step 6. REQUIRED - Update STATE.md:**
+
+You MUST add entry under "Roadmap Evolution":
+```
+- Phases {X.1}, {X.2}... inserted after Phase {X}: Fix phases from UAT (AUTO)
+```
+
+**Step 7. REQUIRED - Commit changes:**
+
+```bash
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "fix({phase_num}): create fix phases from UAT gaps" --files .planning/ROADMAP.md .planning/STATE.md .planning/phases/*
+```
+
+**Step 8. REQUIRED - Present completion (only AFTER all previous steps complete):**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ GSD ► FIX PHASES CREATED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Source:** Phase {phase_number} UAT
+**Gaps diagnosed:** {N}
+**Fix phases created:** {M}
+
+| Phase | Name | Gaps |
+|-------|------|------|
+| {X.1} | {name} | {gap list} |
+| {X.2} | {name} | {gap list} |
+
+Each fix phase has a GAPS.md with full diagnosis context.
+
+───────────────────────────────────────────────────────────────
+
+## ▶ Next Up
+
+**Plan first fix phase:**
+
+`/gsd:plan-phase {X.1}`
+
+<sub>`/clear` first → fresh context window</sub>
+
+───────────────────────────────────────────────────────────────
+
+**Or for fully autonomous execution:**
+
+`/gsd:execute-phase {X.1} --auto`  (if auto-planning enabled)
+
+───────────────────────────────────────────────────────────────
+```
+
+**Exit workflow** — fix phases are now tracked in roadmap for standard execution. Do NOT proceed to `plan_gap_closure`.
 </step>
 
 <step name="plan_gap_closure">

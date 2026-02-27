@@ -29,6 +29,9 @@ Parse current values (default to `true` if not present):
 - `workflow.plan_check` — spawn plan checker during plan-phase
 - `workflow.verifier` — spawn verifier during execute-phase
 - `workflow.nyquist_validation` — validation architecture research during plan-phase
+- `workflow.auto_insert_fix_phases` — create fix phases from UAT gaps instead of inline planning
+- `workflow.self_discussion` — use architect agents instead of user questions during discuss-phase
+- `workflow.self_discussion_rounds` — number of deeper questioning rounds per topic (default: 3)
 - `model_profile` — which model each agent uses (default: `balanced`)
 - `git.branching_strategy` — branching approach (default: `"none"`)
 </step>
@@ -102,6 +105,34 @@ AskUserQuestion([
       { label: "Per Phase", description: "Create branch for each phase (gsd/phase-{N}-{name})" },
       { label: "Per Milestone", description: "Create branch for entire milestone (gsd/{version}-{name})" }
     ]
+  },
+  {
+    question: "Auto-insert fix phases from UAT issues?",
+    header: "Fix Phases",
+    multiSelect: false,
+    options: [
+      { label: "No (Recommended)", description: "Plan fixes inline within current phase" },
+      { label: "Yes", description: "Create new phases for UAT issues (enables autonomous fix cycles)" }
+    ]
+  },
+  {
+    question: "Use self-discussion mode? (architect agents instead of user questions)",
+    header: "Self-Discuss",
+    multiSelect: false,
+    options: [
+      { label: "No (Recommended)", description: "Interactive discussion with user" },
+      { label: "Yes", description: "Spawn architect agents to discuss gray areas autonomously" }
+    ]
+  },
+  {
+    question: "How many discussion rounds per topic? (only applies if self-discussion enabled)",
+    header: "Rounds",
+    multiSelect: false,
+    options: [
+      { label: "2 rounds", description: "Quick analysis and recommendation" },
+      { label: "3 rounds (Recommended)", description: "Initial analysis, deeper investigation, final recommendation" },
+      { label: "4 rounds", description: "Additional round for implementation details and edge cases" }
+    ]
   }
 ])
 ```
@@ -119,7 +150,10 @@ Merge new settings into existing config.json:
     "plan_check": true/false,
     "verifier": true/false,
     "auto_advance": true/false,
-    "nyquist_validation": true/false
+    "nyquist_validation": true/false,
+    "auto_insert_fix_phases": true/false,
+    "self_discussion": true/false,
+    "self_discussion_rounds": 2/3/4
   },
   "git": {
     "branching_strategy": "none" | "phase" | "milestone"
@@ -167,7 +201,10 @@ Write `~/.gsd/defaults.json` with:
     "plan_check": <current>,
     "verifier": <current>,
     "auto_advance": <current>,
-    "nyquist_validation": <current>
+    "nyquist_validation": <current>,
+    "auto_insert_fix_phases": <current>,
+    "self_discussion": <current>,
+    "self_discussion_rounds": <current>
   }
 }
 ```
@@ -190,6 +227,9 @@ Display:
 | Auto-Advance         | {On/Off} |
 | Nyquist Validation   | {On/Off} |
 | Git Branching        | {None/Per Phase/Per Milestone} |
+| Auto Fix Phases      | {On/Off} |
+| Self-Discussion      | {On/Off} |
+| Discussion Rounds    | {2/3/4} |
 | Saved as Defaults    | {Yes/No} |
 
 These settings apply to future /gsd:plan-phase and /gsd:execute-phase runs.
@@ -206,7 +246,7 @@ Quick commands:
 
 <success_criteria>
 - [ ] Current config read
-- [ ] User presented with 7 settings (profile + 5 workflow toggles + git branching)
+- [ ] User presented with 10 settings (profile + 8 workflow toggles + git branching)
 - [ ] Config updated with model_profile, workflow, and git sections
 - [ ] User offered to save as global defaults (~/.gsd/defaults.json)
 - [ ] Changes confirmed to user

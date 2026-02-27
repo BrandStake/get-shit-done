@@ -239,7 +239,7 @@ Track auto-fix attempts per task. After 3 auto-fix attempts on a single task:
 Check if auto mode is active at executor start:
 
 ```bash
-AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance 2>/dev/null || echo "false")
+AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance --raw 2>/dev/null || echo "false")
 ```
 
 Store the result for checkpoint handling below.

@@ -43,11 +43,11 @@ Analyze phase complexity to determine team mode vs simple mode execution.
 
 ```bash
 # Check if agent teams feature is enabled
-AGENT_TEAMS_ENABLED=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.enabled 2>/dev/null || echo "false")
-AGENT_TEAMS_MODE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.mode 2>/dev/null || echo "auto")
-MIN_TASKS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_tasks_for_team 2>/dev/null || echo "5")
-MIN_DOMAINS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_domains_for_team 2>/dev/null || echo "2")
-FALLBACK_ON_FAILURE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.fallback_on_failure 2>/dev/null || echo "true")
+AGENT_TEAMS_ENABLED=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.enabled --raw 2>/dev/null || echo "false")
+AGENT_TEAMS_MODE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.mode --raw 2>/dev/null || echo "auto")
+MIN_TASKS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_tasks_for_team --raw 2>/dev/null || echo "5")
+MIN_DOMAINS_FOR_TEAM=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.min_domains_for_team --raw 2>/dev/null || echo "2")
+FALLBACK_ON_FAILURE=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.fallback_on_failure --raw 2>/dev/null || echo "true")
 ```
 
 **Analyze phase complexity:**
@@ -214,8 +214,8 @@ done
 # Get unique domains from complexity analysis
 DOMAINS=$(echo "$COMPLEXITY" | jq -r '.domains[]' 2>/dev/null)
 TEAMMATE_COUNT=0
-MAX_TEAMMATES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.max_teammates 2>/dev/null || echo "5")
-SPECIALIST_MODEL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.specialist_model 2>/dev/null || echo "sonnet")
+MAX_TEAMMATES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.max_teammates --raw 2>/dev/null || echo "5")
+SPECIALIST_MODEL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.specialist_model --raw 2>/dev/null || echo "sonnet")
 
 echo "Spawning specialist teammates for domains: ${DOMAINS}"
 
@@ -315,8 +315,8 @@ You are the general executor in the GSD execution team for phase ${PHASE_NUMBER}
 **4. Monitor team progress:**
 
 ```bash
-TASK_TIMEOUT_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.task_timeout_minutes 2>/dev/null || echo "10")
-STUCK_THRESHOLD_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.stuck_task_threshold_minutes 2>/dev/null || echo "5")
+TASK_TIMEOUT_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.task_timeout_minutes --raw 2>/dev/null || echo "10")
+STUCK_THRESHOLD_MINUTES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.stuck_task_threshold_minutes --raw 2>/dev/null || echo "5")
 POLL_INTERVAL=30  # seconds
 
 echo "Monitoring team progress..."
@@ -1355,7 +1355,7 @@ Plans with `autonomous: false` require user interaction.
 
 Read auto-advance config:
 ```bash
-AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance 2>/dev/null || echo "false")
+AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance --raw 2>/dev/null || echo "false")
 ```
 
 When executor returns a checkpoint AND `AUTO_CFG` is `"true"`:
@@ -1585,7 +1585,7 @@ STOP. Do not proceed to auto-advance or transition.
 1. Parse `--auto` flag from $ARGUMENTS
 2. Read `workflow.auto_advance` from config:
    ```bash
-   AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance 2>/dev/null || echo "false")
+   AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance --raw 2>/dev/null || echo "false")
    ```
 
 **If `--auto` flag present OR `AUTO_CFG` is true (AND verification passed with no gaps):**

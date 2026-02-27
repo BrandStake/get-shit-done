@@ -313,55 +313,59 @@ Present summary:
 
 **If issues > 0:** Proceed to `diagnose_issues`
 
-**If issues == 0, execute these steps IN ORDER:**
+**If issues == 0:**
+
+**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip to "Next Steps" until specialist verification is complete.**
 
 **Step 1.** Display UAT completion:
 ```
 All tests passed or skipped. No issues found.
 ```
 
-**Step 2.** Check config and get verification tier - run this command:
+**Step 2. REQUIRED - Run this command NOW before proceeding:**
 ```bash
 node -e "
 const fs=require('fs');
 const cfg=JSON.parse(fs.readFileSync('.planning/config.json','utf8'));
 const enabled = cfg.agent_teams?.enabled || false;
+const tier = cfg.verification?.default_tier || 2;
 console.log('ENABLED=' + enabled);
-console.log('TIER=3');
+console.log('TIER=' + tier);
 "
 ```
 
-**Step 3.** If ENABLED=true, spawn specialists based on TIER. Execute ALL applicable Task calls:
+**Step 3. REQUIRED if ENABLED=true - Spawn verification specialists:**
 
-**Step 3a.** (Tier 1, 2, 3) Spawn code-reviewer:
+You MUST spawn these specialists based on TIER. Do NOT skip this step. Do NOT display "Next Steps" until specialists complete.
+
+**Step 3a.** (All tiers) Spawn code-reviewer - REQUIRED:
 ```
 Task(
   subagent_type="code-reviewer",
   description="Code review phase files",
-  prompt="Review source files for code quality. Focus on: patterns, bugs, maintainability. Return 3-5 line summary."
+  prompt="Review source files modified in this phase for code quality. Focus on: patterns, bugs, maintainability. Return 3-5 line summary."
 )
 ```
 
-**Step 3b.** (Tier 2, 3 only) You MUST spawn qa-expert NOW - do not skip this:
+**Step 3b.** (Tier 2, 3) Spawn qa-expert - REQUIRED for tier >= 2:
 ```
 Task(
   subagent_type="qa-expert",
   description="QA review phase",
-  prompt="Review test coverage and quality. Focus on: edge cases, error handling. Return 3-5 line summary."
+  prompt="Review test coverage and quality for this phase. Focus on: edge cases, error handling. Return 3-5 line summary."
 )
 ```
-Wait for qa-expert Task to complete before proceeding.
 
-**Step 3c.** (Tier 3 only) Spawn principal-engineer:
+**Step 3c.** (Tier 3 only) Spawn architect-reviewer - REQUIRED for tier 3:
 ```
 Task(
-  subagent_type="principal-engineer",
-  description="Architecture review",
-  prompt="Review architecture and production-readiness. Focus on: scalability, patterns. Return 3-5 line summary."
+  subagent_type="voltagent-qa-sec:architect-reviewer",
+  description="Architecture review phase",
+  prompt="Review architecture and production-readiness for this phase. Focus on: scalability, patterns. Return 3-5 line summary."
 )
 ```
 
-**Step 4.** After ALL Tasks complete, compile the specialist findings:
+**Step 4. REQUIRED - Wait for ALL Tasks then compile findings:**
 ```
 ---
 ## Specialist Verification Summary
@@ -370,17 +374,17 @@ Task(
 [Summarize findings from code-reviewer Task]
 
 ### QA Review (qa-expert)
-[Summarize findings from qa-expert Task]
+[Summarize findings from qa-expert Task - or N/A if tier < 2]
 
-### Architecture Review (principal-engineer)
-[Summarize findings from principal-engineer Task]
+### Architecture Review (architect-reviewer)
+[Summarize findings from architect-reviewer Task - or N/A if tier < 3]
 
 ### Overall Assessment
 - Critical issues: [count]
 - Recommendations for next phase: [list]
 ```
 
-**Step 5.** (If ENABLED=false, skip to here) Display next steps:
+**Step 5. Display next steps (only AFTER specialist verification or if ENABLED=false):**
 ```
 ---
 Verification Complete

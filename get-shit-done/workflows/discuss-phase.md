@@ -441,7 +441,7 @@ Check for auto-advance trigger:
 1. Parse `--auto` flag from $ARGUMENTS
 2. Read `workflow.auto_advance` from config:
    ```bash
-   AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance 2>/dev/null || echo "false")
+   AUTO_CFG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_advance --raw 2>/dev/null || echo "false")
    ```
 
 **If `--auto` flag present AND `AUTO_CFG` is not true:** Persist auto-advance to config (handles direct `--auto` usage without new-project):

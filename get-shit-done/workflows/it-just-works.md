@@ -43,46 +43,70 @@ fi
 </step>
 
 <step name="validate_config">
-**CRITICAL: You MUST validate ALL config settings before proceeding. Do NOT skip any check.**
+**CRITICAL: You MUST configure optimal autonomous settings before proceeding.**
 
-**Step 1. REQUIRED - Load and validate config:**
+**Step 1. REQUIRED - Apply full autonomous configuration:**
 
-```bash
-node -e "
-const fs = require('fs');
-const cfg = JSON.parse(fs.readFileSync('.planning/config.json', 'utf8'));
-
-const checks = {
-  'agent_teams.enabled': cfg.agent_teams?.enabled === true,
-  'workflow.auto_advance': cfg.workflow?.auto_advance === true,
-  'workflow.auto_insert_fix_phases': cfg.workflow?.auto_insert_fix_phases === true,
-  'workflow.plan_check': cfg.workflow?.plan_check === true,
-  'workflow.verifier': cfg.workflow?.verifier === true,
-  'workflow.self_discussion': cfg.workflow?.self_discussion === true
-};
-
-const failed = Object.entries(checks).filter(([k, v]) => !v).map(([k]) => k);
-
-console.log('CHECKS_PASSED=' + (failed.length === 0));
-console.log('FAILED_CHECKS=' + JSON.stringify(failed));
-"
-```
-
-**Step 2. REQUIRED - If any checks failed, you MUST fix them:**
-
-If CHECKS_PASSED=false, you MUST run these commands to enable autonomous mode:
+For it-just-works mode, we don't check existing config - we ALWAYS apply optimal settings.
+This ensures consistent autonomous behavior regardless of prior configuration.
 
 ```bash
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.enabled true
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.auto_advance true
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.auto_insert_fix_phases true
+# Core settings
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set model_profile quality
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set mode yolo
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set depth comprehensive
+
+# Workflow settings
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.research true
 node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.plan_check true
 node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.verifier true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.auto_advance true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.auto_insert_fix_phases true
 node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.self_discussion true
 node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set workflow.self_discussion_rounds 3
+
+# Parallelization settings
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set parallelization.enabled true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set parallelization.plan_level true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set parallelization.task_level false
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set parallelization.max_concurrent_agents 3
+
+# Agent teams settings - ALWAYS use teams
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.enabled true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.mode always
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.min_tasks_for_team 3
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.min_domains_for_team 2
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.specialist_model opus
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.fallback_on_failure true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.max_teammates 5
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set agent_teams.task_timeout_minutes 10
+
+# Verification settings
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.enabled true
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.default_tier 2
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.tier_overrides.authentication 3
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.tier_overrides.payments 3
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.tier_overrides.database 3
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-set verification.tier_overrides.security 3
 ```
 
-Do NOT ask user permission. Do NOT display warnings. Just fix and continue.
+**Step 2. REQUIRED - Display applied configuration:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ AUTONOMOUS CONFIG APPLIED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ • Model: quality (opus for discussion/planning)
+ • Mode: yolo (no confirmations)
+ • Depth: comprehensive
+ • Agent Teams: always (specialists per domain)
+ • Verification: tier 2 default, tier 3 for critical paths
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Do NOT ask user permission. Do NOT display warnings. Just apply and continue.
 
 **Step 3. REQUIRED - Validate project structure:**
 
@@ -120,9 +144,9 @@ PHASES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs phases list)
 For each phase, determine status:
 - `not_started` — No PLAN.md exists
 - `planned` — PLAN.md exists, no SUMMARY.md
-- `executed` — SUMMARY.md exists, no UAT.md
-- `verified` — UAT.md exists with status: complete
-- `has_issues` — UAT.md exists with issues > 0
+- `executed` — SUMMARY.md exists, no VERIFICATION.md
+- `verified` — VERIFICATION.md exists with status: passed
+- `has_issues` — VERIFICATION.md exists with status: gaps_found or issues_found
 
 **Step 3. REQUIRED - Initialize loop counter:**
 
@@ -201,19 +225,47 @@ fi
 
 **Step 2. REQUIRED - Find next phase needing work:**
 
-Query phases to find first phase where:
-1. Status is `not_started` and NO CONTEXT.md → needs discussion first
-2. Status is `not_started` and HAS CONTEXT.md → needs planning
-3. Status is `planned` → needs execution
-4. Status is `executed` → needs verification
-5. Status is `has_issues` → fix phases should exist, find them
+For each phase in order, check what exists and determine next action:
 
-Check for CONTEXT.md:
 ```bash
-ls ${phase_dir}/*-CONTEXT.md 2>/dev/null
+# For each phase directory, check file existence to determine status
+PHASE_DIR=".planning/phases/{phase_dir}"
+
+# Check what files exist
+HAS_CONTEXT=$(ls "$PHASE_DIR"/*-CONTEXT.md 2>/dev/null | wc -l)
+HAS_PLANS=$(ls "$PHASE_DIR"/*-PLAN.md 2>/dev/null | wc -l)
+HAS_SUMMARY=$(ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null | wc -l)
+HAS_VERIFICATION=$(ls "$PHASE_DIR"/*-VERIFICATION.md 2>/dev/null | wc -l)
+
+# Determine phase status based on files
+if [ "$HAS_VERIFICATION" -gt 0 ]; then
+  # Check if verification passed (status: passed)
+  VERIFY_STATUS=$(grep -l "status: passed" "$PHASE_DIR"/*-VERIFICATION.md 2>/dev/null | wc -l)
+  if [ "$VERIFY_STATUS" -gt 0 ]; then
+    PHASE_STATUS="verified"  # Phase complete, skip to next
+  else
+    PHASE_STATUS="has_issues"  # Verification failed, needs fixes
+  fi
+elif [ "$HAS_SUMMARY" -gt 0 ]; then
+  PHASE_STATUS="executed"  # Needs verification
+elif [ "$HAS_PLANS" -gt 0 ]; then
+  PHASE_STATUS="planned"  # Needs execution
+elif [ "$HAS_CONTEXT" -gt 0 ]; then
+  PHASE_STATUS="discussed"  # Needs planning
+else
+  PHASE_STATUS="not_started"  # Needs discussion
+fi
 ```
 
-If NO phases need work → proceed to `milestone_audit`
+**Status → Action mapping:**
+- `not_started` → run `/gsd:discuss-phase`
+- `discussed` → run `/gsd:plan-phase`
+- `planned` → run `/gsd:execute-phase`
+- `executed` → run `/gsd:verify-work --auto`
+- `has_issues` → fix phases should already exist, find and execute them
+- `verified` → skip to next phase
+
+Find the FIRST phase that is NOT `verified`. If ALL phases are `verified` → proceed to `milestone_audit`
 
 **Step 3. REQUIRED - Log progress:**
 
@@ -223,164 +275,63 @@ If NO phases need work → proceed to `milestone_audit`
 ───────────────────────────────────────────────────────────────
 ```
 
-**Step 4. REQUIRED - Execute appropriate action:**
+**Step 4. REQUIRED - Execute appropriate action using existing GSD commands:**
+
+**CRITICAL:** Use the Skill tool to invoke existing GSD commands directly. Do NOT duplicate their logic. Do NOT spawn agents to call commands.
 
 **Step 4a.** If phase needs DISCUSSION (no CONTEXT.md):
 
-You MUST spawn self-discussion before planning. Self-discussion mode is enabled in config.
+Invoke discuss-phase directly:
 
 ```
-Task(
-  subagent_type="general-purpose",
-  model="sonnet",
-  prompt="""
-You are running autonomous self-discussion for Phase {phase_number}: {phase_name}.
-
-<files_to_read>
-- ~/.claude/get-shit-done/workflows/discuss-phase.md
-- .planning/ROADMAP.md
-- .planning/PROJECT.md
-- .planning/STATE.md
-</files_to_read>
-
-<autonomous_mode>
-You are in AUTONOMOUS mode with SELF_DISCUSSION=true.
-- Do NOT use AskUserQuestion
-- Do NOT ask the user anything
-- Spawn architect-reviewer agents for each gray area
-- Run {SELF_DISCUSSION_ROUNDS} rounds of deeper questioning per topic
-- Synthesize all findings into CONTEXT.md
-</autonomous_mode>
-
-<instructions>
-1. Read discuss-phase.md for workflow structure
-2. Execute analyze_phase step to identify gray areas
-3. Execute self_discuss_areas step:
-   - Spawn voltagent-qa-sec:architect-reviewer for EACH gray area in PARALLEL
-   - Each agent conducts {SELF_DISCUSSION_ROUNDS} rounds of analysis
-   - Collect all recommendations
-4. Execute write_context step with synthesized decisions
-5. Commit CONTEXT.md
-6. Return: DISCUSSION COMPLETE
-</instructions>
-""",
-  description="Self-discuss phase {phase_number} (autonomous)"
-)
+Skill(skill="gsd:discuss-phase", args="{phase_number}")
 ```
 
-After discussion completes, continue to planning (do not re-enter loop yet).
+The discuss-phase workflow handles everything: gray area analysis, architect-reviewer spawning, CONTEXT.md creation. With self_discussion=true (set in config), it runs autonomously.
 
-**Step 4b.** If phase needs PLANNING:
+After CONTEXT.md exists, continue to planning.
 
-You MUST spawn gsd-planner directly. Do NOT use /gsd:plan-phase interactively.
+**Step 4b.** If phase needs PLANNING (no PLAN.md files):
 
-```
-Task(
-  subagent_type="gsd-planner",
-  model="sonnet",
-  prompt="""
-<planning_context>
-**Phase:** {phase_number}
-**Phase Name:** {phase_name}
-**Mode:** autonomous
-
-<files_to_read>
-- .planning/ROADMAP.md
-- .planning/STATE.md
-- .planning/PROJECT.md
-- .planning/phases/{phase_dir}/ (all files)
-</files_to_read>
-</planning_context>
-
-<autonomous_mode>
-You are in AUTONOMOUS mode. Do NOT ask questions. Do NOT wait for approval.
-Make all decisions based on context. Create complete, executable plans.
-</autonomous_mode>
-
-<downstream_consumer>
-Output consumed by gsd-executor. Plans must be executable prompts.
-</downstream_consumer>
-""",
-  description="Plan phase {phase_number} (autonomous)"
-)
-```
-
-After planner completes, spawn checker:
+Invoke plan-phase directly:
 
 ```
-Task(
-  subagent_type="gsd-plan-checker",
-  model="sonnet",
-  prompt="""
-<verification_context>
-**Phase:** {phase_number}
-
-<files_to_read>
-- .planning/phases/{phase_dir}/*-PLAN.md
-</files_to_read>
-</verification_context>
-
-Return: VERIFICATION PASSED or ISSUES FOUND with specific fixes needed.
-""",
-  description="Check phase {phase_number} plans"
-)
+Skill(skill="gsd:plan-phase", args="{phase_number}")
 ```
 
-If checker finds issues, loop planner→checker up to 3 times. Then proceed regardless.
+The plan-phase workflow handles everything: research, planning, plan-checker verification. With mode=yolo (set in config), it runs without confirmations.
 
-**Step 4c.** If phase needs EXECUTION:
+After PLAN.md files exist, continue to execution.
 
-You MUST spawn gsd-executor directly:
+**Step 4c.** If phase needs EXECUTION (has PLAN.md, no SUMMARY.md):
 
-```
-Task(
-  subagent_type="gsd-executor",
-  model="sonnet",
-  prompt="""
-<execution_context>
-**Phase:** {phase_number}
-**Mode:** autonomous
-
-<files_to_read>
-- .planning/phases/{phase_dir}/*-PLAN.md (all plans)
-</files_to_read>
-</execution_context>
-
-<autonomous_mode>
-You are in AUTONOMOUS mode. Execute all tasks. Make atomic commits.
-Do NOT ask questions. Do NOT wait for approval. Just execute.
-</autonomous_mode>
-""",
-  description="Execute phase {phase_number} (autonomous)"
-)
-```
-
-**Step 4d.** If phase needs VERIFICATION:
-
-You MUST spawn verification with --auto mode:
+Invoke execute-phase directly:
 
 ```
-Task(
-  subagent_type="general-purpose",
-  model="sonnet",
-  prompt="""
-Execute /gsd:verify-work {phase_number} --auto
-
-You are in AUTONOMOUS mode. Do NOT ask questions. Do NOT present tests interactively.
-Use automated testing via agent teams. Record all results to UAT.md.
-
-If issues are found:
-1. Diagnosis runs automatically
-2. Fix phases are auto-inserted (workflow.auto_insert_fix_phases is enabled)
-3. Return with list of fix phases created
-
-If no issues:
-1. Complete specialist verification
-2. Return success
-""",
-  description="Verify phase {phase_number} (autonomous)"
-)
+Skill(skill="gsd:execute-phase", args="{phase_number}")
 ```
+
+The execute-phase workflow handles everything: team creation, specialist spawning, task monitoring, SUMMARY.md creation. With agent_teams.mode=always (set in config), it uses teams.
+
+After SUMMARY.md files exist, continue to verification.
+
+**Step 4d.** If phase needs VERIFICATION (has SUMMARY.md, no VERIFICATION.md):
+
+Invoke verify-work with --auto flag:
+
+```
+Skill(skill="gsd:verify-work", args="{phase_number} --auto")
+```
+
+The verify-work workflow handles everything:
+- Stage 1 (Structural): Must-haves, artifacts, key links, anti-patterns, specialist reviews
+- Stage 2 (Functional): UAT tests via team-based automated testing
+
+With --auto flag, it runs autonomously without interactive prompts.
+
+If issues are found, fix phases are auto-inserted (workflow.auto_insert_fix_phases is enabled in config).
+
+After VERIFICATION.md exists with status=passed, phase is done. Continue to next phase.
 
 **Step 5. REQUIRED - Increment counter and loop:**
 
@@ -405,52 +356,20 @@ Do NOT exit loop until no phases need work.
 **Step 1. REQUIRED - Run milestone audit:**
 
 ```
-Task(
-  subagent_type="gsd-integration-checker",
-  model="sonnet",
-  prompt="""
-Audit milestone {milestone_version} for completion.
-
-<files_to_read>
-- .planning/ROADMAP.md
-- .planning/REQUIREMENTS.md
-- .planning/STATE.md
-- .planning/phases/**/SUMMARY.md
-- .planning/phases/**/*-UAT.md
-</files_to_read>
-
-Check:
-1. All requirements satisfied
-2. All phases verified
-3. All E2E flows working
-4. No unresolved gaps
-
-Return:
-- AUDIT PASSED — milestone ready for completion
-- AUDIT FAILED — list gaps that need phases
-""",
-  description="Audit milestone {milestone_version}"
-)
+Skill(skill="gsd:audit-milestone", args="")
 ```
+
+The audit-milestone workflow checks all requirements are satisfied and all phases verified.
 
 **Step 2. If AUDIT FAILED:**
 
-You MUST create fix phases for gaps:
+Create fix phases for gaps:
 
 ```
-Task(
-  subagent_type="general-purpose",
-  model="sonnet",
-  prompt="""
-Execute /gsd:plan-milestone-gaps
-
-You are in AUTONOMOUS mode. Create all fix phases needed.
-Do NOT ask user which gaps to include. Include ALL must/should gaps.
-Defer only nice-to-have gaps.
-""",
-  description="Create gap closure phases"
-)
+Skill(skill="gsd:plan-milestone-gaps", args="")
 ```
+
+The plan-milestone-gaps workflow creates phases for all must/should gaps automatically.
 
 After fix phases created, return to `main_loop` to execute them.
 
@@ -464,18 +383,13 @@ Proceed to `complete_milestone`.
 
 **Step 1. REQUIRED - Complete and archive milestone:**
 
-```bash
-# Archive milestone
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs milestone complete "${milestone_version}"
+```
+Skill(skill="gsd:complete-milestone", args="")
 ```
 
-**Step 2. REQUIRED - Commit completion:**
+The complete-milestone workflow archives the milestone and commits the completion.
 
-```bash
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "milestone(${milestone_version}): complete" --files .planning/
-```
-
-**Step 3. REQUIRED - Display completion:**
+**Step 2. REQUIRED - Display completion:**
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

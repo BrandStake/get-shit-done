@@ -438,7 +438,13 @@ echo "Team mode execution complete."
 
 **7. Proceed to verification:**
 
-After team mode completes, continue to `verify_phase_goal` step (same as simple mode).
+After team mode completes, invoke unified verification:
+
+```
+Skill(skill="gsd:verify-work", args="{phase_number} --auto")
+```
+
+The verify-work workflow handles both structural (must-haves) and functional (UAT) verification in a single pipeline.
 
 </step>
 
@@ -1465,72 +1471,7 @@ node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "docs(phase-${PARENT_PHASE
 ```
 </step>
 
-<step name="verify_phase_goal">
-Verify phase achieved its GOAL, not just completed tasks.
-
-```bash
-PHASE_REQ_IDS=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs roadmap get-phase "${PHASE_NUMBER}" | jq -r '.section' | grep -i "Requirements:" | sed 's/.*Requirements:\*\*\s*//' | sed 's/[\[\]]//g')
-```
-
-```
-Task(
-  prompt="Verify phase {phase_number} goal achievement.
-Phase directory: {phase_dir}
-Phase goal: {goal from ROADMAP.md}
-Phase requirement IDs: {phase_req_ids}
-Check must_haves against actual codebase.
-Cross-reference requirement IDs from PLAN frontmatter against REQUIREMENTS.md — every ID MUST be accounted for.
-Create VERIFICATION.md.",
-  subagent_type="gsd-verifier",
-  model="{verifier_model}"
-)
-```
-
-Read status:
-```bash
-grep "^status:" "$PHASE_DIR"/*-VERIFICATION.md | cut -d: -f2 | tr -d ' '
-```
-
-| Status | Action |
-|--------|--------|
-| `passed` | → update_roadmap |
-| `human_needed` | Present items for human testing, get approval or feedback |
-| `gaps_found` | Present gap summary, offer `/gsd:plan-phase {phase} --gaps` |
-
-**If human_needed:**
-```
-## ✓ Phase {X}: {Name} — Human Verification Required
-
-All automated checks passed. {N} items need human testing:
-
-{From VERIFICATION.md human_verification section}
-
-"approved" → continue | Report issues → gap closure
-```
-
-**If gaps_found:**
-```
-## ⚠ Phase {X}: {Name} — Gaps Found
-
-**Score:** {N}/{M} must-haves verified
-**Report:** {phase_dir}/{phase_num}-VERIFICATION.md
-
-### What's Missing
-{Gap summaries from VERIFICATION.md}
-
----
-## ▶ Next Up
-
-`/gsd:plan-phase {X} --gaps`
-
-<sub>`/clear` first → fresh context window</sub>
-
-Also: `cat {phase_dir}/{phase_num}-VERIFICATION.md` — full report
-Also: `/gsd:verify-work {X}` — manual testing first
-```
-
-Gap closure cycle: `/gsd:plan-phase {X} --gaps` reads VERIFICATION.md → creates gap plans with `gap_closure: true` → user runs `/gsd:execute-phase {X} --gaps-only` → verifier re-runs.
-</step>
+<!-- verify_phase_goal step REMOVED - verification now handled by unified /gsd:verify-work workflow -->
 
 <step name="update_roadmap">
 **Mark phase complete and update all tracking files:**
@@ -1555,7 +1496,7 @@ node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "docs(phase-{X}): complete
 
 <step name="offer_next">
 
-**Exception:** If `gaps_found`, the `verify_phase_goal` step already presents the gap-closure path (`/gsd:plan-phase {X} --gaps`). No additional routing needed — skip auto-advance.
+**Exception:** If `gaps_found`, the verify-work workflow already presents the gap-closure path or auto-inserts fix phases. No additional routing needed — skip auto-advance.
 
 **No-transition check (spawned by auto-advance chain):**
 

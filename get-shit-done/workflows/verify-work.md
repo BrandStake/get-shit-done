@@ -1,27 +1,30 @@
 <purpose>
-Validate built features through conversational testing with persistent state. Creates UAT.md that tracks test progress, survives /clear, and feeds gaps into /gsd:plan-phase --gaps.
+Unified verification workflow for GSD phases. Runs two-stage verification:
+- Stage 1: Structural - Must-haves checking, artifact verification, key links, anti-patterns
+- Stage 2: Functional - UAT testing (manual or automated)
 
-User tests, Claude records. One test at a time. Plain text responses.
+Creates a single VERIFICATION.md with both stages' results.
 </purpose>
 
 <philosophy>
-**Show expected, ask if reality matches.**
+**Two stages, one output.**
 
-Claude presents what SHOULD happen. User confirms or describes what's different.
-- "yes" / "y" / "next" / empty → pass
-- Anything else → logged as issue, severity inferred
+Stage 1 (Structural) verifies the code exists and is wired correctly.
+Stage 2 (Functional) verifies the code works as expected.
 
-No Pass/Fail buttons. No severity questions. Just: "Here's what should happen. Does it?"
+Both stages run. Both results go into VERIFICATION.md.
+If Stage 1 finds critical gaps, Stage 2 can be skipped.
+Fix phases are only created ONCE, after both stages complete.
 </philosophy>
 
 <template>
-@~/.claude/get-shit-done/templates/UAT.md
+@~/.claude/get-shit-done/templates/VERIFICATION.md (unified two-stage verification)
 </template>
 
 <process>
 
 <step name="initialize" priority="first">
-If $ARGUMENTS contains a phase number, load context:
+Parse arguments and load context:
 
 ```bash
 INIT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs init verify-work "${PHASE_ARG}")
@@ -29,276 +32,285 @@ INIT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs init verify-work "${PHASE_
 
 Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `has_verification`.
 
-**Parse `--auto` flag:**
+**Parse flags:**
 
 ```bash
 AUTO_MODE=false
+SKIP_STAGE1=false
+SKIP_STAGE2=false
+
 if [[ "$ARGUMENTS" == *"--auto"* ]]; then
   AUTO_MODE=true
 fi
+if [[ "$ARGUMENTS" == *"--skip-structural"* ]]; then
+  SKIP_STAGE1=true
+fi
+if [[ "$ARGUMENTS" == *"--skip-functional"* ]]; then
+  SKIP_STAGE2=true
+fi
 ```
 
-When AUTO_MODE=true, skip manual testing (present_test, process_response) and use automated_testing instead.
-</step>
-
-<step name="check_active_session">
-**First: Check for active UAT sessions**
+**Check for existing verification:**
 
 ```bash
-find .planning/phases -name "*-UAT.md" -type f 2>/dev/null | head -5
+EXISTING_VERIFICATION="$PHASE_DIR/${PHASE_NUM}-VERIFICATION.md"
+if [ -f "$EXISTING_VERIFICATION" ]; then
+  # Read status from frontmatter
+  PREV_STATUS=$(grep "^status:" "$EXISTING_VERIFICATION" | cut -d: -f2 | tr -d ' ')
+  if [ "$PREV_STATUS" = "passed" ]; then
+    echo "Phase already verified and passed. Use --force to re-verify."
+    # Exit unless --force flag
+    if [[ "$ARGUMENTS" != *"--force"* ]]; then
+      exit 0
+    fi
+  fi
+fi
 ```
-
-**If active sessions exist AND no $ARGUMENTS provided:**
-
-Read each file's frontmatter (status, phase) and Current Test section.
-
-Display inline:
-
-```
-## Active UAT Sessions
-
-| # | Phase | Status | Current Test | Progress |
-|---|-------|--------|--------------|----------|
-| 1 | 04-comments | testing | 3. Reply to Comment | 2/6 |
-| 2 | 05-auth | testing | 1. Login Form | 0/4 |
-
-Reply with a number to resume, or provide a phase number to start new.
-```
-
-Wait for user response.
-
-- If user replies with number (1, 2) → Load that file, go to `resume_from_file`
-- If user replies with phase number → Treat as new session, go to `create_uat_file`
-
-**If active sessions exist AND $ARGUMENTS provided:**
-
-Check if session exists for that phase. If yes, offer to resume or restart.
-If no, continue to `create_uat_file`.
-
-**If no active sessions AND no $ARGUMENTS:**
-
-```
-No active UAT sessions.
-
-Provide a phase number to start testing (e.g., /gsd:verify-work 4)
-```
-
-**If no active sessions AND $ARGUMENTS provided:**
-
-Continue to `create_uat_file`.
 </step>
 
-<step name="find_summaries">
-**Find what to test:**
+<step name="stage1_structural">
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+**STAGE 1: STRUCTURAL VERIFICATION**
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
-Use `phase_dir` from init (or run init if not already done).
+Verify the code exists and is properly wired. This checks:
+- Must-haves from PLAN.md frontmatter
+- Artifact existence (Level 1)
+- Artifact substance (Level 2 - not a stub)
+- Artifact wiring (Level 3 - connected/imported)
+- Key link verification
+- Anti-pattern scanning
+
+**If SKIP_STAGE1=true:** Skip to `stage2_functional`
+
+**1.1. Load phase context:**
 
 ```bash
-ls "$phase_dir"/*-SUMMARY.md 2>/dev/null
+ls "$PHASE_DIR"/*-PLAN.md 2>/dev/null
+ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null
+PHASE_GOAL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs roadmap get-phase "$PHASE_NUM" --field goal)
 ```
 
-Read each SUMMARY.md to extract testable deliverables.
+**1.2. Extract must-haves from PLAN frontmatter:**
+
+Check for `must_haves:` block in each PLAN.md:
+
+```yaml
+must_haves:
+  truths:
+    - "User can see existing messages"
+    - "User can send a message"
+  artifacts:
+    - path: "src/components/Chat.tsx"
+      provides: "Message list rendering"
+  key_links:
+    - from: "Chat.tsx"
+      to: "api/chat"
+      via: "fetch in useEffect"
+```
+
+**If no must_haves in frontmatter:** Derive from phase goal:
+1. State the goal from ROADMAP.md
+2. Derive truths: "What must be TRUE?" — list 3-7 observable behaviors
+3. Derive artifacts: For each truth, "What must EXIST?"
+4. Derive key links: For each artifact, "What must be CONNECTED?"
+
+**1.3. Verify artifacts (Three Levels):**
+
+For each artifact:
+
+```bash
+ARTIFACT_RESULT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs verify artifacts "$PLAN_PATH")
+```
+
+Parse JSON: `{ all_passed, passed, total, artifacts: [{path, exists, issues, passed}] }`
+
+| exists | issues empty | Status |
+|--------|--------------|--------|
+| true   | true         | ✓ VERIFIED |
+| true   | false        | ✗ STUB |
+| false  | -            | ✗ MISSING |
+
+**For wiring (Level 3):**
+
+```bash
+# Import check
+grep -r "import.*$artifact_name" "${search_path:-src/}" --include="*.ts" --include="*.tsx" 2>/dev/null | wc -l
+
+# Usage check
+grep -r "$artifact_name" "${search_path:-src/}" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v "import" | wc -l
+```
+
+| Exists | Substantive | Wired | Status |
+|--------|-------------|-------|--------|
+| ✓      | ✓           | ✓     | ✓ VERIFIED |
+| ✓      | ✓           | ✗     | ⚠️ ORPHANED |
+| ✓      | ✗           | -     | ✗ STUB |
+| ✗      | -           | -     | ✗ MISSING |
+
+**1.4. Verify key links:**
+
+```bash
+LINKS_RESULT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs verify key-links "$PLAN_PATH")
+```
+
+Parse JSON: `{ all_verified, verified, total, links: [{from, to, via, verified, detail}] }`
+
+**1.5. Scan for anti-patterns:**
+
+```bash
+# TODO/FIXME/placeholder comments
+grep -n -E "TODO|FIXME|XXX|HACK|PLACEHOLDER" "$file" 2>/dev/null
+# Empty implementations
+grep -n -E "return null|return \{\}|return \[\]|=> \{\}" "$file" 2>/dev/null
+```
+
+Categorize: 🛑 Blocker | ⚠️ Warning | ℹ️ Info
+
+**1.6. Spawn verification specialists (if configured):**
+
+Check for `verification:` block in plan frontmatter:
+
+```yaml
+verification:
+  tier: 2
+  specialists:
+    - voltagent-qa-sec:code-reviewer
+    - voltagent-qa-sec:qa-expert
+```
+
+If specialists defined, spawn in parallel:
+
+```
+Task(
+  subagent_type="{specialist}",
+  model="sonnet",
+  prompt="""
+<review_context>
+**Phase:** {phase_number}
+**What was built:** {Summary from SUMMARY.md}
+
+**Files to review:**
+{files_modified}
+</review_context>
+
+<your_role>
+Review code for quality, security, test coverage based on specialist type.
+</your_role>
+
+<output_format>
+Return structured findings:
+## {Specialist Type} Review
+### Issues Found
+- **Severity:** critical | major | minor
+- **File:** path
+- **Issue:** description
+- **Recommendation:** how to fix
+### Summary
+Total issues: N (critical: N, major: N, minor: N)
+</output_format>
+""",
+  description="{specialist} review"
+)
+```
+
+**1.7. Determine Stage 1 status:**
+
+```
+STAGE1_STATUS=passed
+STAGE1_SCORE="N/M"
+STAGE1_CRITICAL_GAPS=[]
+
+# Failed truths/artifacts
+if any_truth_failed or any_artifact_missing_or_stub:
+  STAGE1_STATUS=gaps_found
+
+# Critical specialist findings
+if critical_issues > 0 or major_issues >= 3:
+  STAGE1_STATUS=gaps_found
+```
+
+**1.8. Early exit check:**
+
+If Stage 1 finds critical structural gaps AND AUTO_MODE=true:
+```
+Skip Stage 2 (functional testing won't help if code doesn't exist/work)
+Proceed to complete_verification
+```
+
+If Stage 1 finds gaps but not critical:
+```
+Continue to Stage 2 (functional testing may reveal more issues)
+```
 </step>
 
-<step name="extract_tests">
-**Extract testable deliverables from SUMMARY.md:**
+<step name="stage2_functional">
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+**STAGE 2: FUNCTIONAL VERIFICATION (UAT)**
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+
+Verify the code works as expected through user acceptance testing.
+
+**If SKIP_STAGE2=true:** Skip to `complete_verification`
+
+**2.1. Extract testable deliverables from SUMMARY.md:**
+
+```bash
+ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null
+```
 
 Parse for:
 1. **Accomplishments** - Features/functionality added
 2. **User-facing changes** - UI, workflows, interactions
 
-Focus on USER-OBSERVABLE outcomes, not implementation details.
-
-For each deliverable, create a test:
+Create test for each deliverable:
 - name: Brief test name
-- expected: What the user should see/experience (specific, observable)
+- expected: What the user should see/experience
 
-Examples:
-- Accomplishment: "Added comment threading with infinite nesting"
-  → Test: "Reply to a Comment"
-  → Expected: "Clicking Reply opens inline composer below comment. Submitting shows reply nested under parent with visual indentation."
+**2.2. Build test list:**
 
-Skip internal/non-observable items (refactors, type changes, etc.).
-</step>
-
-<step name="create_uat_file">
-**Create UAT file with all tests:**
-
-```bash
-mkdir -p "$PHASE_DIR"
+```yaml
+tests:
+  - number: 1
+    name: "Send a message"
+    expected: "User types message, clicks send, message appears in list"
+  - number: 2
+    name: "View message history"
+    expected: "On page load, existing messages display in chronological order"
 ```
 
-Build test list from extracted deliverables.
+**2.3. Execute tests based on mode:**
 
-Create file:
+**If AUTO_MODE=true:** Run automated testing
 
-```markdown
----
-status: testing
-phase: XX-name
-mode: [manual | auto]  # Set based on AUTO_MODE flag
-source: [list of SUMMARY.md files]
-started: [ISO timestamp]
-updated: [ISO timestamp]
----
-
-## Current Test
-<!-- OVERWRITE each test - shows where we are -->
-
-number: 1
-name: [first test name]
-expected: |
-  [what user should observe]
-awaiting: user response
-
-## Tests
-
-### 1. [Test Name]
-expected: [observable behavior]
-result: [pending]
-
-### 2. [Test Name]
-expected: [observable behavior]
-result: [pending]
-
-...
-
-## Summary
-
-total: [N]
-passed: 0
-issues: 0
-pending: [N]
-skipped: 0
-
-## Gaps
-
-[none yet]
-```
-
-Write to `.planning/phases/XX-name/{phase_num}-UAT.md`
-
-**If AUTO_MODE=true:** Proceed to `automated_testing`
-**If AUTO_MODE=false:** Proceed to `present_test`
-</step>
-
-<step name="automated_testing" conditional="AUTO_MODE=true">
-**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip any step. Do NOT proceed to `complete_session` until all steps finish.**
-
-**Step 1. REQUIRED - Check agent teams config:**
-
-You MUST run this command first:
+Check agent teams config:
 ```bash
 AGENT_TEAMS_ENABLED=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.enabled --raw 2>/dev/null || echo "false")
-MAX_TESTERS=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.max_teammates --raw 2>/dev/null || echo "4")
-SPECIALIST_MODEL=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get agent_teams.specialist_model --raw 2>/dev/null || echo "sonnet")
 ```
 
-**If AGENT_TEAMS_ENABLED=false:**
+If enabled, create verification team and spawn test agents:
+
 ```
-Agent teams not enabled. Run /gsd:settings to enable agent_teams.
+TeamCreate(team_name="verify-{phase_number}", description="UAT for phase {phase_number}")
 
-Falling back to manual verification...
-```
-You MUST proceed to `present_test` instead. Do NOT continue with automated testing.
+# Create tasks for each test
+TaskCreate(subject="Test: {test_name}", description="Expected: {expected}...")
 
-**Step 2. REQUIRED - Create verification team:**
-
-You MUST create the team before spawning any agents:
-```
-TeamCreate(
-  team_name="verify-{phase_number}",
-  description="Automated UAT for phase {phase_number}"
-)
-```
-
-**Step 3. REQUIRED - Create tasks for each test:**
-
-For EACH test extracted from SUMMARY.md, you MUST create a task:
-```
-TaskCreate(
-  subject="Test: {test_name}",
-  description="""
-  **Expected:** {expected}
-  **Files:** {relevant files from SUMMARY.md}
-
-  Verify this behavior is correctly implemented.
-  Return: PASS, FAIL (with reason), or SKIP (if can't test automatically)
-  """,
-  activeForm="Testing {test_name}"
-)
-```
-
-Do NOT skip any tests. Every test from SUMMARY.md MUST have a corresponding task.
-
-**Step 4. REQUIRED - Spawn test agents as teammates:**
-
-**Step 4a.** Determine agent type based on test characteristics:
-- Contains "API", "endpoint", "request" → `backend-developer`
-- Contains "UI", "component", "display", "render" → `voltagent-qa-sec:qa-expert`
-- Contains "flow", "integration", "end-to-end" → `gsd-integration-checker`
-- Default → `voltagent-qa-sec:qa-expert`
-
-**Step 4b.** You MUST spawn agents in parallel (up to MAX_TESTERS concurrent):
-```
+# Spawn test agents
 Task(
   team_name="verify-{phase_number}",
   name="tester-{N}",
-  subagent_type="{appropriate_agent}",
-  model="{SPECIALIST_MODEL}",
-  prompt="""
-You are a test agent on team verify-{phase_number}.
-
-<instructions>
-1. Check TaskList for available test tasks
-2. Claim a task (TaskUpdate with owner)
-3. Read the relevant files
-4. Verify the expected behavior
-5. Update task with result:
-   - PASS: Mark completed, add "PASS: [brief confirmation]" to description
-   - FAIL: Mark completed, add "FAIL: [what's wrong]" to description
-   - SKIP: Mark completed, add "SKIP: [reason]" to description
-6. Repeat until no tasks remain
-7. Send message to orchestrator when done
-</instructions>
-  """,
-  description="Test agent {N} for phase {phase_number}"
+  subagent_type="voltagent-qa-sec:qa-expert",
+  model="sonnet",
+  prompt="You are a test agent. Check TaskList, claim tests, verify expected behavior, mark PASS/FAIL/SKIP."
 )
 ```
 
-**Step 5. REQUIRED - Monitor team completion:**
+Monitor until all tasks complete, collect results, cleanup team.
 
-You MUST wait for ALL test tasks to be completed. Use SendMessage to coordinate. Do NOT proceed until every task has status `completed`.
+**If AUTO_MODE=false:** Run manual testing
 
-**Step 6. REQUIRED - Collect results and update UAT.md:**
-
-For EACH completed task, you MUST:
-- Parse result from task description (PASS/FAIL/SKIP)
-- Map to UAT format (pass/issue/skipped)
-- If FAIL: extract reason, infer severity using severity_inference rules
-- Update UAT.md Tests section with result
-
-Do NOT skip any task results. Every task MUST be recorded in UAT.md.
-
-**Step 7. REQUIRED - Cleanup team:**
-
-You MUST delete the team after collecting all results:
-```
-TeamDelete(team_name="verify-{phase_number}")
-```
-
-**Step 8.** Proceed to `complete_session` (which handles specialist verification)
-</step>
-
-<step name="present_test">
-**If AUTO_MODE=true:** Skip this step — automated_testing already handled verification. Proceed directly to `complete_session`.
-
-**Present current test to user:**
-
-Read Current Test section from UAT file.
-
-Display using checkpoint box format:
-
+Present tests one at a time:
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║  CHECKPOINT: Verification Required                           ║
@@ -313,478 +325,251 @@ Display using checkpoint box format:
 ──────────────────────────────────────────────────────────────
 ```
 
-Wait for user response (plain text, no AskUserQuestion).
+Process responses:
+- "pass", "yes", "y", "ok" → mark passed
+- "skip", "n/a" → mark skipped
+- Anything else → mark as issue, infer severity
+
+**2.4. Determine Stage 2 status:**
+
+```
+STAGE2_STATUS=passed
+STAGE2_SCORE="N/M tests passed"
+STAGE2_ISSUES=[]
+
+if any_test_failed:
+  STAGE2_STATUS=issues_found
+```
 </step>
 
-<step name="process_response">
-**Process user response and update file:**
+<step name="complete_verification">
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+**COMPLETE: CREATE VERIFICATION.md**
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
-**If response indicates pass:**
-- Empty response, "yes", "y", "ok", "pass", "next", "approved", "✓"
+**3.1. Determine overall status:**
 
-Update Tests section:
 ```
-### {N}. {name}
-expected: {expected}
-result: pass
-```
-
-**If response indicates skip:**
-- "skip", "can't test", "n/a"
-
-Update Tests section:
-```
-### {N}. {name}
-expected: {expected}
-result: skipped
-reason: [user's reason if provided]
+if STAGE1_STATUS=gaps_found:
+  OVERALL_STATUS=gaps_found
+elif STAGE2_STATUS=issues_found:
+  OVERALL_STATUS=issues_found
+else:
+  OVERALL_STATUS=passed
 ```
 
-**If response is anything else:**
-- Treat as issue description
+**3.2. Create VERIFICATION.md:**
 
-Infer severity from description:
-- Contains: crash, error, exception, fails, broken, unusable → blocker
-- Contains: doesn't work, wrong, missing, can't → major
-- Contains: slow, weird, off, minor, small → minor
-- Contains: color, font, spacing, alignment, visual → cosmetic
-- Default if unclear: major
+Use Write tool to create `.planning/phases/{phase_dir}/{phase_num}-VERIFICATION.md`:
 
-Update Tests section:
-```
-### {N}. {name}
-expected: {expected}
-result: issue
-reported: "{verbatim user response}"
-severity: {inferred}
-```
-
-Append to Gaps section (structured YAML for plan-phase --gaps):
-```yaml
-- truth: "{expected behavior from test}"
-  status: failed
-  reason: "User reported: {verbatim user response}"
-  severity: {inferred}
-  test: {N}
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
-```
-
-**After any response:**
-
-Update Summary counts.
-Update frontmatter.updated timestamp.
-
-If more tests remain → Update Current Test, go to `present_test`
-If no more tests → Go to `complete_session`
-</step>
-
-<step name="resume_from_file">
-**Resume testing from UAT file:**
-
-Read the full UAT file.
-
-Find first test with `result: [pending]`.
-
-Announce:
-```
-Resuming: Phase {phase} UAT
-Progress: {passed + issues + skipped}/{total}
-Issues found so far: {issues count}
-
-Continuing from Test {N}...
-```
-
-Update Current Test section with the pending test.
-Proceed to `present_test`.
-</step>
-
-<step name="complete_session">
-**Complete testing and commit:**
-
-Update frontmatter:
-- status: complete
-- updated: [now]
-
-Clear Current Test section:
-```
-## Current Test
-
-[testing complete]
-```
-
-Commit the UAT file:
-```bash
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "test({phase_num}): complete UAT - {passed} passed, {issues} issues" --files ".planning/phases/XX-name/{phase_num}-UAT.md"
-```
-
-Present summary:
-```
-## UAT Complete: Phase {phase}
-
-| Result | Count |
-|--------|-------|
-| Passed | {N}   |
-| Issues | {N}   |
-| Skipped| {N}   |
-
-[If issues > 0:]
-### Issues Found
-
-[List from Issues section]
-```
-
-**If issues > 0:** Proceed to `diagnose_issues`
-
-**If issues == 0:**
-
-**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip to "Next Steps" until specialist verification is complete.**
-
-**Step 1.** Display UAT completion:
-```
-All tests passed or skipped. No issues found.
-```
-
-**Step 2. REQUIRED - Run this command NOW before proceeding:**
-```bash
-node -e "
-const fs=require('fs');
-const cfg=JSON.parse(fs.readFileSync('.planning/config.json','utf8'));
-const enabled = cfg.agent_teams?.enabled || false;
-const tier = cfg.verification?.default_tier || 2;
-console.log('ENABLED=' + enabled);
-console.log('TIER=' + tier);
-"
-```
-
-**Step 3. REQUIRED if ENABLED=true - Spawn verification specialists:**
-
-You MUST spawn these specialists based on TIER. Do NOT skip this step. Do NOT display "Next Steps" until specialists complete.
-
-**Step 3a.** (All tiers) Spawn code-reviewer - REQUIRED:
-```
-Task(
-  subagent_type="code-reviewer",
-  description="Code review phase files",
-  prompt="Review source files modified in this phase for code quality. Focus on: patterns, bugs, maintainability. Return 3-5 line summary."
-)
-```
-
-**Step 3b.** (Tier 2, 3) Spawn qa-expert - REQUIRED for tier >= 2:
-```
-Task(
-  subagent_type="qa-expert",
-  description="QA review phase",
-  prompt="Review test coverage and quality for this phase. Focus on: edge cases, error handling. Return 3-5 line summary."
-)
-```
-
-**Step 3c.** (Tier 3 only) Spawn architect-reviewer - REQUIRED for tier 3:
-```
-Task(
-  subagent_type="voltagent-qa-sec:architect-reviewer",
-  description="Architecture review phase",
-  prompt="Review architecture and production-readiness for this phase. Focus on: scalability, patterns. Return 3-5 line summary."
-)
-```
-
-**Step 4. REQUIRED - Wait for ALL Tasks then compile findings:**
-```
+```markdown
 ---
-## Specialist Verification Summary
+phase: XX-name
+verified: YYYY-MM-DDTHH:MM:SSZ
+status: passed | gaps_found | issues_found
+mode: auto | manual
 
-### Code Review (code-reviewer)
-[Summarize findings from code-reviewer Task]
+stage1:
+  status: passed | gaps_found | skipped
+  score: N/M must-haves verified
+  truths_verified: N
+  truths_total: M
+  artifacts_verified: N
+  key_links_verified: N
+  anti_patterns: N
+  specialist_review:
+    tier: 2
+    total_issues: N
+    critical: N
+    major: N
+    minor: N
 
-### QA Review (qa-expert)
-[Summarize findings from qa-expert Task - or N/A if tier < 2]
+stage2:
+  status: passed | issues_found | skipped
+  score: N/M tests passed
+  tests_passed: N
+  tests_failed: N
+  tests_skipped: N
 
-### Architecture Review (architect-reviewer)
-[Summarize findings from architect-reviewer Task - or N/A if tier < 3]
-
-### Overall Assessment
-- Critical issues: [count]
-- Recommendations for next phase: [list]
-```
-
-**Step 5. Display next steps (only AFTER specialist verification or if ENABLED=false):**
-```
+gaps: # Only if status != passed
+  - truth: "Observable truth that failed"
+    stage: 1 | 2
+    status: failed
+    reason: "Why it failed"
+    severity: critical | major | minor
+    artifacts:
+      - path: "src/path/to/file.tsx"
+        issue: "What's wrong"
+    missing:
+      - "Specific thing to add/fix"
 ---
-Verification Complete
+
+# Phase {X}: {Name} Verification Report
+
+**Phase Goal:** {goal from ROADMAP.md}
+**Verified:** {timestamp}
+**Status:** {status}
+**Mode:** {auto | manual}
+
+## Stage 1: Structural Verification
+
+{If skipped: "Skipped via --skip-structural flag"}
+
+### Observable Truths
+
+| # | Truth | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | {truth} | ✓ VERIFIED | {evidence} |
+| 2 | {truth} | ✗ FAILED | {what's wrong} |
+
+**Score:** {N}/{M} truths verified
+
+### Required Artifacts
+
+| Artifact | Status | Level 1 | Level 2 | Level 3 |
+|----------|--------|---------|---------|---------|
+| `path` | ✓ | exists | substantive | wired |
+
+### Key Links
+
+| From | To | Via | Status |
+|------|-----|-----|--------|
+
+### Anti-Patterns
+
+| File | Line | Pattern | Severity |
+|------|------|---------|----------|
+
+### Specialist Reviews
+
+{Only if verification.specialists was in plan}
+
+| Specialist | Issues | Critical | Major | Minor |
+|------------|--------|----------|-------|-------|
+
+---
+
+## Stage 2: Functional Verification (UAT)
+
+{If skipped: "Skipped via --skip-functional flag or Stage 1 critical gaps"}
+
+### Test Results
+
+| # | Test | Expected | Result | Notes |
+|---|------|----------|--------|-------|
+| 1 | {name} | {expected} | PASS | |
+| 2 | {name} | {expected} | FAIL | {user response} |
+
+**Score:** {N}/{M} tests passed
+
+---
+
+## Summary
+
+| Stage | Status | Score |
+|-------|--------|-------|
+| Stage 1: Structural | {status} | {N/M} |
+| Stage 2: Functional | {status} | {N/M} |
+| **Overall** | **{status}** | |
+
+{If gaps/issues found:}
+### Gaps Found
+
+{N} gaps blocking completion:
+
+1. **{Truth/Test}** (Stage {N}) — {reason}
+   - Severity: {severity}
+   - Missing: {what needs to be added}
+
+---
+
+_Verified: {timestamp}_
+_Verifier: Claude (verify-work)_
+```
+
+**3.3. Commit VERIFICATION.md:**
+
+```bash
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "verify({phase_num}): complete verification - {status}" --files ".planning/phases/{phase_dir}/{phase_num}-VERIFICATION.md"
+```
+
+**3.4. Route based on status:**
+
+**If status=passed:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ✓ VERIFICATION PASSED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Phase {X}: {Name} verified successfully.
+
+Stage 1 (Structural): {N}/{M} must-haves verified
+Stage 2 (Functional): {N}/{M} tests passed
 
 Next Steps:
 - /gsd:plan-phase {next} — Plan next phase
 - /gsd:execute-phase {next} — Execute next phase
 ```
+
+**If status=gaps_found or issues_found:**
+Proceed to `diagnose_and_fix`
 </step>
 
-<step name="specialist_verification_legacy" conditional="false">
-**DEPRECATED - specialist verification is now inline in complete_session**
+<step name="diagnose_and_fix">
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+**DIAGNOSE ISSUES AND CREATE FIX PHASES**
+**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
-**Prerequisites:** Agent teams feature enabled in config (`agent_teams.enabled: true`).
-
-**1. Determine verification tier from plans:**
-
-```bash
-# Read verification tier from plan frontmatter
-VERIFICATION_TIER=$(grep -h "^tier:" "$PHASE_DIR"/*-PLAN.md 2>/dev/null | head -1 | cut -d: -f2 | tr -d ' ' || echo "1")
-
-# Load tier overrides from config
-TIER_CONFIG=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get verification.tier_overrides 2>/dev/null || echo "{}")
-```
-
-**2. Map tier to verification specialists:**
-
-| Tier | Specialists | Focus Areas |
-|------|-------------|-------------|
-| 1 | code-reviewer | Code quality, patterns |
-| 2 | code-reviewer, qa-expert | + Test coverage, edge cases |
-| 3 | code-reviewer, qa-expert, principal-engineer | + Architecture, security, production-readiness |
-
-```bash
-case $VERIFICATION_TIER in
-  1) SPECIALISTS="voltagent-qa-sec:code-reviewer" ;;
-  2) SPECIALISTS="voltagent-qa-sec:code-reviewer voltagent-qa-sec:qa-expert" ;;
-  3) SPECIALISTS="voltagent-qa-sec:code-reviewer voltagent-qa-sec:qa-expert voltagent-core-dev:principal-engineer" ;;
-  *) SPECIALISTS="voltagent-qa-sec:code-reviewer" ;;
-esac
-```
-
-**3. Create verification team:**
-
-```
-TeamCreate(
-  team_name="verify-${PHASE_NUMBER}",
-  description="Specialist verification for phase ${PHASE_NUMBER}"
-)
-```
-
-**4. Spawn verification specialists:**
-
-```bash
-# Get files modified from SUMMARY.md files
-FILES_MODIFIED=$(grep -h "^- " "$PHASE_DIR"/*-SUMMARY.md | grep -E "\.(ts|js|py|go|rs|java)$" | sort -u)
-
-for SPECIALIST in $SPECIALISTS; do
-  SPECIALIST_NAME=$(echo "$SPECIALIST" | cut -d: -f2)
-
-  # Define focus area per specialist
-  case $SPECIALIST_NAME in
-    code-reviewer) FOCUS="Code quality, design patterns, security vulnerabilities, maintainability" ;;
-    qa-expert) FOCUS="Test coverage, edge cases, error handling, integration points" ;;
-    principal-engineer) FOCUS="Architecture alignment, scalability, production readiness, technical debt" ;;
-    *) FOCUS="General code review" ;;
-  esac
-
-  Task(
-    team_name="verify-${PHASE_NUMBER}",
-    name="${SPECIALIST_NAME}",
-    subagent_type="${SPECIALIST}",
-    model="${checker_model}",
-    prompt="
-You are a verification specialist reviewing phase ${PHASE_NUMBER} implementation.
-
-**Your role:** ${SPECIALIST_NAME}
-**Focus area:** ${FOCUS}
-
-## Files to Review
-
-${FILES_MODIFIED}
-
-## Instructions
-
-1. Read all modified files
-2. Review with your specialist focus area in mind
-3. Create findings as team tasks via TaskCreate:
-   - severity: critical/major/minor/cosmetic
-   - file: path to affected file
-   - line: line number(s) if applicable
-   - issue: description of the problem
-   - recommendation: suggested fix
-
-4. Return structured summary:
-   ```
-   ## ${SPECIALIST_NAME} Review
-
-   **Files reviewed:** [count]
-   **Issues found:** [count by severity]
-
-   ### Critical Issues
-   [list]
-
-   ### Recommendations
-   [list]
-   ```
-"
-  )
-done
-```
-
-**5. Monitor verification team:**
-
-```bash
-echo "Verification specialists reviewing implementation..."
-
-while true; do
-  TASK_STATUS=$(TaskList(team_name="verify-${PHASE_NUMBER}"))
-
-  COMPLETED=$(echo "$TASK_STATUS" | jq '[.[] | select(.status == "completed")] | length')
-  TOTAL=$(echo "$TASK_STATUS" | jq 'length')
-
-  if [ "$COMPLETED" -eq "$TOTAL" ]; then
-    echo "All specialists complete."
-    break
-  fi
-
-  sleep 15
-done
-```
-
-**6. Aggregate findings and update UAT:**
-
-```bash
-# Collect all findings from team tasks
-FINDINGS=$(TaskList(team_name="verify-${PHASE_NUMBER}") | jq '[.[] | select(.subject | startswith("finding:"))]')
-
-# Count by severity
-CRITICAL=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: critical"))] | length')
-MAJOR=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: major"))] | length')
-MINOR=$(echo "$FINDINGS" | jq '[.[] | select(.description | contains("severity: minor"))] | length')
-
-# Append specialist findings to UAT.md
-cat >> "$PHASE_DIR/${PHASE_NUMBER}-UAT.md" << EOF
-
-## Specialist Verification
-
-**Tier:** $VERIFICATION_TIER
-**Specialists:** $(echo $SPECIALISTS | tr ' ' ', ')
-
-### Findings Summary
-
-| Severity | Count |
-|----------|-------|
-| Critical | $CRITICAL |
-| Major    | $MAJOR |
-| Minor    | $MINOR |
-
-### Detailed Findings
-
-$(echo "$FINDINGS" | jq -r '.[] | "- **\(.subject)**: \(.description)"')
-EOF
-
-# Cleanup verification team
-TeamDelete(team_name="verify-${PHASE_NUMBER}")
-
-echo "Specialist verification complete. Findings added to UAT.md"
-```
-
-**7. Handle critical findings:**
-
-If critical findings > 0:
-- Block automatic progression
-- Add critical issues to Gaps section
-- Require explicit user acknowledgment before proceeding
-
-If no critical findings:
-- Proceed to diagnose_issues (if UAT issues exist)
-- Otherwise, display:
-```
----
-Specialist verification complete. No critical issues.
-
-Next Steps:
-- /gsd:plan-phase {next} — Plan next phase
-- /gsd:execute-phase {next} — Execute next phase
-```
-</step>
-
-<step name="diagnose_issues">
-**Diagnose root causes before planning fixes:**
-
-```
----
-
-{N} issues found. Diagnosing root causes...
-
-Spawning parallel debug agents to investigate each issue.
-```
-
-- Load diagnose-issues workflow
-- Follow @~/.claude/get-shit-done/workflows/diagnose-issues.md
-- Spawn parallel debug agents for each issue
-- Collect root causes
-- Update UAT.md with root causes
-
-**After diagnosis, check routing:**
+**4.1. Check auto-insert config:**
 
 ```bash
 AUTO_INSERT_PHASES=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs config-get workflow.auto_insert_fix_phases --raw 2>/dev/null || echo "false")
 ```
 
-- **If AUTO_INSERT_PHASES=true:** Proceed to `auto_insert_fix_phases`
-- **If AUTO_INSERT_PHASES=false:** Proceed to `plan_gap_closure`
-
-Diagnosis runs automatically - no user prompt. Parallel agents investigate simultaneously, so overhead is minimal and fixes are more accurate.
-</step>
-
-<step name="auto_insert_fix_phases" conditional="AUTO_INSERT_PHASES=true">
-**CRITICAL: You MUST execute ALL of the following steps in order. Do NOT skip any step. Do NOT proceed to next steps until each step completes.**
-
-This step enables fully autonomous fix cycles. Instead of planning fixes within the current phase, we create new phases for each fix, allowing them to go through the standard plan→execute→verify cycle.
-
-**Step 1. REQUIRED - Display status:**
+**If AUTO_INSERT_PHASES=false:**
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- GSD ► AUTO-INSERTING FIX PHASES
+ ✗ VERIFICATION FAILED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Creating fix phases from diagnosed gaps...
+{N} gaps found. See VERIFICATION.md for details.
+
+Run `/gsd:plan-phase {phase} --gaps` to plan fixes.
 ```
+Exit workflow.
 
-**Step 2. REQUIRED - Read diagnosed gaps from UAT.md:**
+**If AUTO_INSERT_PHASES=true:**
 
-You MUST read the UAT file and parse the Gaps section:
-```bash
-cat "${phase_dir}/${phase_num}-UAT.md"
-```
+**4.2. Spawn debug agents for diagnosis (optional):**
 
-Extract each gap's: `truth`, `reason`, `severity`, `root_cause`, `artifacts`, `missing`
+If issues are complex, spawn parallel debug agents to investigate root causes.
+Update VERIFICATION.md gaps with root_cause field.
 
-**Step 3. REQUIRED - Group gaps into logical fix phases:**
+**4.3. Group gaps into fix phases:**
 
-You MUST group gaps using these rules:
-- Same affected file/component → combine into one fix phase
+Rules:
+- Same affected file/component → combine
 - Same subsystem (auth, API, UI) → combine
-- Dependency order (fix stubs before wiring)
 - Keep phases focused: 1-3 gaps each
 
-Do NOT create one phase per gap unless gaps are completely unrelated.
+**4.4. Create fix phases:**
 
-**Step 4. REQUIRED - Create fix phases:**
+For each grouped fix:
 
-For EACH grouped fix phase, you MUST run:
-
-**Step 4a.** Generate descriptive name from gaps:
 ```bash
 FIX_NAME="Fix: {primary issue summary}"
-```
-
-**Step 4b.** Insert as decimal phase after current phase - REQUIRED:
-```bash
 RESULT=$(node ~/.claude/get-shit-done/bin/gsd-tools.cjs phase insert "${phase_number}" "${FIX_NAME}")
 ```
 
-**Step 4c.** Extract from result: `new_phase_number`, `directory`, `slug`
+Extract: `new_phase_number`, `directory`, `slug`
 
-**Step 5. REQUIRED - Create GAPS.md for each new fix phase:**
-
-For EACH new fix phase directory, you MUST write a context file:
+**4.5. Create GAPS.md for each fix phase:**
 
 ```bash
 cat > "${directory}/GAPS.md" << 'EOF'
 ---
 source_phase: {phase_number}
-source_uat: {phase_dir}/{phase_num}-UAT.md
+source_verification: {phase_dir}/{phase_num}-VERIFICATION.md
 created: {timestamp}
 ---
 
@@ -792,6 +577,7 @@ created: {timestamp}
 
 ### Gap {N}: {truth}
 
+**Stage:** {1 or 2}
 **Severity:** {severity}
 **Root Cause:** {root_cause}
 **Reported:** {reason}
@@ -804,282 +590,60 @@ created: {timestamp}
 EOF
 ```
 
-Do NOT skip this step. The GAPS.md file is consumed by `/gsd:plan-phase` to understand what to fix.
+**4.6. Update STATE.md:**
 
-**Step 6. REQUIRED - Update STATE.md:**
-
-You MUST add entry under "Roadmap Evolution":
+Add entry under "Roadmap Evolution":
 ```
-- Phases {X.1}, {X.2}... inserted after Phase {X}: Fix phases from UAT (AUTO)
+- Phases {X.1}, {X.2}... inserted after Phase {X}: Fix phases from verification (AUTO)
 ```
 
-**Step 7. REQUIRED - Commit changes:**
+**4.7. Commit changes:**
 
 ```bash
-node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "fix({phase_num}): create fix phases from UAT gaps" --files .planning/ROADMAP.md .planning/STATE.md .planning/phases/*
+node ~/.claude/get-shit-done/bin/gsd-tools.cjs commit "fix({phase_num}): create fix phases from verification gaps" --files .planning/ROADMAP.md .planning/STATE.md .planning/phases/*
 ```
 
-**Step 8. REQUIRED - Present completion (only AFTER all previous steps complete):**
+**4.8. Present completion:**
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  GSD ► FIX PHASES CREATED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Source:** Phase {phase_number} UAT
-**Gaps diagnosed:** {N}
+**Source:** Phase {phase_number} Verification
+**Gaps found:** {N}
 **Fix phases created:** {M}
 
 | Phase | Name | Gaps |
 |-------|------|------|
 | {X.1} | {name} | {gap list} |
-| {X.2} | {name} | {gap list} |
 
-Each fix phase has a GAPS.md with full diagnosis context.
-
-───────────────────────────────────────────────────────────────
-
-## ▶ Next Up
-
-**Plan first fix phase:**
-
-`/gsd:plan-phase {X.1}`
-
-<sub>`/clear` first → fresh context window</sub>
-
-───────────────────────────────────────────────────────────────
-
-**Or for fully autonomous execution:**
-
-`/gsd:execute-phase {X.1} --auto`  (if auto-planning enabled)
-
-───────────────────────────────────────────────────────────────
-```
-
-**Exit workflow** — fix phases are now tracked in roadmap for standard execution. Do NOT proceed to `plan_gap_closure`.
-</step>
-
-<step name="plan_gap_closure">
-**Auto-plan fixes from diagnosed gaps:**
-
-Display:
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- GSD ► PLANNING FIXES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-◆ Spawning planner for gap closure...
-```
-
-Spawn gsd-planner in --gaps mode:
-
-```
-Task(
-  prompt="""
-<planning_context>
-
-**Phase:** {phase_number}
-**Mode:** gap_closure
-
-<files_to_read>
-- {phase_dir}/{phase_num}-UAT.md (UAT with diagnoses)
-- .planning/STATE.md (Project State)
-- .planning/ROADMAP.md (Roadmap)
-</files_to_read>
-
-</planning_context>
-
-<downstream_consumer>
-Output consumed by /gsd:execute-phase
-Plans must be executable prompts.
-</downstream_consumer>
-""",
-  subagent_type="gsd-planner",
-  model="{planner_model}",
-  description="Plan gap fixes for Phase {phase}"
-)
-```
-
-On return:
-- **PLANNING COMPLETE:** Proceed to `verify_gap_plans`
-- **PLANNING INCONCLUSIVE:** Report and offer manual intervention
-</step>
-
-<step name="verify_gap_plans">
-**Verify fix plans with checker:**
-
-Display:
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- GSD ► VERIFYING FIX PLANS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-◆ Spawning plan checker...
-```
-
-Initialize: `iteration_count = 1`
-
-Spawn gsd-plan-checker:
-
-```
-Task(
-  prompt="""
-<verification_context>
-
-**Phase:** {phase_number}
-**Phase Goal:** Close diagnosed gaps from UAT
-
-<files_to_read>
-- {phase_dir}/*-PLAN.md (Plans to verify)
-</files_to_read>
-
-</verification_context>
-
-<expected_output>
-Return one of:
-- ## VERIFICATION PASSED — all checks pass
-- ## ISSUES FOUND — structured issue list
-</expected_output>
-""",
-  subagent_type="gsd-plan-checker",
-  model="{checker_model}",
-  description="Verify Phase {phase} fix plans"
-)
-```
-
-On return:
-- **VERIFICATION PASSED:** Proceed to `present_ready`
-- **ISSUES FOUND:** Proceed to `revision_loop`
-</step>
-
-<step name="revision_loop">
-**Iterate planner ↔ checker until plans pass (max 3):**
-
-**If iteration_count < 3:**
-
-Display: `Sending back to planner for revision... (iteration {N}/3)`
-
-Spawn gsd-planner with revision context:
-
-```
-Task(
-  prompt="""
-<revision_context>
-
-**Phase:** {phase_number}
-**Mode:** revision
-
-<files_to_read>
-- {phase_dir}/*-PLAN.md (Existing plans)
-</files_to_read>
-
-**Checker issues:**
-{structured_issues_from_checker}
-
-</revision_context>
-
-<instructions>
-Read existing PLAN.md files. Make targeted updates to address checker issues.
-Do NOT replan from scratch unless issues are fundamental.
-</instructions>
-""",
-  subagent_type="gsd-planner",
-  model="{planner_model}",
-  description="Revise Phase {phase} plans"
-)
-```
-
-After planner returns → spawn checker again (verify_gap_plans logic)
-Increment iteration_count
-
-**If iteration_count >= 3:**
-
-Display: `Max iterations reached. {N} issues remain.`
-
-Offer options:
-1. Force proceed (execute despite issues)
-2. Provide guidance (user gives direction, retry)
-3. Abandon (exit, user runs /gsd:plan-phase manually)
-
-Wait for user response.
-</step>
-
-<step name="present_ready">
-**Present completion and next steps:**
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- GSD ► FIXES READY ✓
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Phase {X}: {Name}** — {N} gap(s) diagnosed, {M} fix plan(s) created
-
-| Gap | Root Cause | Fix Plan |
-|-----|------------|----------|
-| {truth 1} | {root_cause} | {phase}-04 |
-| {truth 2} | {root_cause} | {phase}-04 |
-
-Plans verified and ready for execution.
-
-───────────────────────────────────────────────────────────────
-
-## ▶ Next Up
-
-**Execute fixes** — run fix plans
-
-`/clear` then `/gsd:execute-phase {phase} --gaps-only`
-
-───────────────────────────────────────────────────────────────
+Next: `/gsd:plan-phase {X.1}`
 ```
 </step>
 
 </process>
 
-<update_rules>
-**Batched writes for efficiency:**
-
-Keep results in memory. Write to file only when:
-1. **Issue found** — Preserve the problem immediately
-2. **Session complete** — Final write before commit
-3. **Checkpoint** — Every 5 passed tests (safety net)
-
-| Section | Rule | When Written |
-|---------|------|--------------|
-| Frontmatter.status | OVERWRITE | Start, complete |
-| Frontmatter.updated | OVERWRITE | On any file write |
-| Current Test | OVERWRITE | On any file write |
-| Tests.{N}.result | OVERWRITE | On any file write |
-| Summary | OVERWRITE | On any file write |
-| Gaps | APPEND | When issue found |
-
-On context reset: File shows last checkpoint. Resume from there.
-</update_rules>
-
 <severity_inference>
-**Infer severity from user's natural language:**
+**Infer severity from context:**
 
-| User says | Infer |
-|-----------|-------|
-| "crashes", "error", "exception", "fails completely" | blocker |
-| "doesn't work", "nothing happens", "wrong behavior" | major |
-| "works but...", "slow", "weird", "minor issue" | minor |
-| "color", "spacing", "alignment", "looks off" | cosmetic |
+| Signal | Severity |
+|--------|----------|
+| Artifact MISSING, crashes, exception | critical |
+| Artifact STUB, doesn't work, wrong behavior | major |
+| ORPHANED, works but..., slow, minor issue | minor |
+| Color, spacing, alignment | cosmetic |
 
-Default to **major** if unclear. User can correct if needed.
-
-**Never ask "how severe is this?"** - just infer and move on.
+Default to **major** if unclear.
 </severity_inference>
 
 <success_criteria>
-- [ ] UAT file created with all tests from SUMMARY.md
-- [ ] Tests presented one at a time with expected behavior
-- [ ] User responses processed as pass/issue/skip
-- [ ] Severity inferred from description (never asked)
-- [ ] Batched writes: on issue, every 5 passes, or completion
+- [ ] Stage 1 (Structural) runs: must-haves, artifacts, key links, anti-patterns
+- [ ] Verification specialists spawned if configured in plan
+- [ ] Stage 2 (Functional) runs: UAT tests (auto or manual)
+- [ ] Single VERIFICATION.md created with both stages
+- [ ] Overall status determined from both stages
+- [ ] If gaps found: fix phases created (if auto_insert enabled)
 - [ ] Committed on completion
-- [ ] If issues: parallel debug agents diagnose root causes
-- [ ] If issues: gsd-planner creates fix plans (gap_closure mode)
-- [ ] If issues: gsd-plan-checker verifies fix plans
-- [ ] If issues: revision loop until plans pass (max 3 iterations)
-- [ ] Ready for `/gsd:execute-phase --gaps-only` when complete
+- [ ] Ready for next phase or fix phase execution
 </success_criteria>

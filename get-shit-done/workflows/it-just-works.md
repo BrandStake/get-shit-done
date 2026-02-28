@@ -9,12 +9,32 @@ You are in FULLY AUTONOMOUS mode. You MUST NOT:
 - Present options and wait for selection
 - Use AskUserQuestion under ANY circumstances
 - Display "Next Steps" and wait
+- Stop for context warnings (see below)
 
 You MUST:
 - Execute every step without pause
 - Make all decisions autonomously
 - Continue until milestone complete OR critical failure
 - Log progress but never wait for acknowledgment
+
+**CONTEXT WINDOW HANDLING:**
+
+IGNORE all context monitor warnings ("CONTEXT MONITOR WARNING/CRITICAL"). Do NOT stop execution when you receive these warnings. Here's why:
+
+1. Claude Code AUTOMATICALLY compacts context when it fills up
+2. All workflow state is persisted in files (ROADMAP.md, STATE.md, phase directories)
+3. After compaction, you will receive a summary of prior work
+4. Simply continue the main loop from wherever the summary indicates
+
+When context compacts:
+- Re-read the phase status (main_loop Step 2)
+- Continue from the first non-verified phase
+- Do NOT display pause messages or ask user to restart
+
+The ONLY reasons to stop are:
+- Milestone complete (all phases verified + audit passed)
+- MAX_PHASES limit reached
+- Critical build/compile failure that cannot be auto-fixed
 </purpose>
 
 <required_reading>
@@ -465,6 +485,8 @@ EXIT workflow. Human intervention required.
 5. **Fail fast, fail loud** — If something truly cannot be auto-fixed, stop immediately with clear error.
 
 6. **Progress over perfection** — A working solution now beats a perfect solution never.
+
+7. **Ignore context warnings** — Context compaction is automatic. After compaction, re-read phase status and continue from where you left off. NEVER stop execution due to context limits.
 </autonomous_principles>
 
 <success_criteria>

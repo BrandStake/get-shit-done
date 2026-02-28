@@ -233,7 +233,7 @@ For each gray area, spawn an expert agent:
 ```
 Task(
   subagent_type="voltagent-qa-sec:architect-reviewer",
-  model="sonnet",
+  model="opus",
   prompt="""
 You are a complex systems architect reviewing implementation decisions for Phase {phase_number}: {phase_name}.
 

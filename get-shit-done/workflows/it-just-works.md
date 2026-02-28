@@ -282,10 +282,27 @@ fi
 - `discussed` → run `/gsd:plan-phase`
 - `planned` → run `/gsd:execute-phase`
 - `executed` → run `/gsd:verify-work --auto`
-- `has_issues` → fix phases should already exist, find and execute them
-- `verified` → skip to next phase
+- `has_issues` → **SKIP** (fix phases X.1, X.2 exist and will be processed next in sort order)
+- `verified` → **SKIP** to next phase
 
-Find the FIRST phase that is NOT `verified`. If ALL phases are `verified` → proceed to `milestone_audit`
+**CRITICAL: has_issues handling:**
+
+When a phase has `has_issues` status (VERIFICATION.md exists with status != passed):
+1. verify-work already created fix phases (e.g., 1.1, 1.2) with CONTEXT.md
+2. Do NOT attempt to re-verify or re-execute the parent phase
+3. SKIP this phase and continue the loop
+4. The fix phases will be found next due to sort order (1 < 1.1 < 1.2 < 2)
+5. Fix phases have CONTEXT.md → status = `discussed` → route to plan-phase
+6. After all fix phases verified, milestone audit validates gaps are closed
+
+```bash
+if [ "$PHASE_STATUS" = "has_issues" ] || [ "$PHASE_STATUS" = "verified" ]; then
+  # Skip this phase, continue to find next unverified phase
+  continue
+fi
+```
+
+Find the FIRST phase that is NOT `verified` AND NOT `has_issues`. If ALL phases are `verified` or `has_issues` with their fix phases verified → proceed to `milestone_audit`
 
 **Step 3. REQUIRED - Log progress:**
 
@@ -487,6 +504,8 @@ EXIT workflow. Human intervention required.
 6. **Progress over perfection** — A working solution now beats a perfect solution never.
 
 7. **Ignore context warnings** — Context compaction is automatic. After compaction, re-read phase status and continue from where you left off. NEVER stop execution due to context limits.
+
+8. **Fix phases flow automatically** — When verification creates fix phases (X.1, X.2), they have CONTEXT.md and flow through plan → execute → verify without discuss-phase. Skip parent phases with has_issues status.
 </autonomous_principles>
 
 <success_criteria>
@@ -494,8 +513,10 @@ EXIT workflow. Human intervention required.
 - [ ] All phases planned (gsd-planner spawned for each)
 - [ ] All phases executed (gsd-executor spawned for each)
 - [ ] All phases verified (verify-work --auto for each)
-- [ ] Fix phases auto-created and executed for any issues
-- [ ] Milestone audit passed
+- [ ] Fix phases auto-created with CONTEXT.md (skips discuss-phase)
+- [ ] Fix phases flow autonomously: plan → execute → verify
+- [ ] Parent phases with has_issues status are skipped (fix phases handle gaps)
+- [ ] Milestone audit passed (validates all gaps closed)
 - [ ] Milestone archived
 - [ ] Zero human prompts throughout entire execution
 </success_criteria>

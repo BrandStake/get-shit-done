@@ -77,7 +77,25 @@ If "Run discuss-phase first": Display `/gsd:discuss-phase {X}` and exit workflow
 
 ## 5. Handle Research
 
-**Skip if:** `--gaps` flag, `--skip-research` flag, or `research_enabled` is false (from init) without `--research` override.
+**Skip if:**
+- `--gaps` flag present
+- `--skip-research` flag present
+- `research_enabled` is false (from init) without `--research` override
+- CONTEXT.md frontmatter contains `skip_research: true` (fix phases)
+
+**Check for fix phase (skip_research in CONTEXT.md):**
+
+```bash
+SKIP_RESEARCH_FROM_CONTEXT="false"
+if [ -n "$CONTEXT_PATH" ] && [ -f "$CONTEXT_PATH" ]; then
+  if grep -q "^skip_research: true" "$CONTEXT_PATH" 2>/dev/null; then
+    SKIP_RESEARCH_FROM_CONTEXT="true"
+    echo "Skipping research: fix phase with pre-defined context from verification"
+  fi
+fi
+```
+
+If `SKIP_RESEARCH_FROM_CONTEXT` is true, skip to step 6.
 
 **If `has_research` is true (from init) AND no `--research` flag:** Use existing, skip to step 6.
 

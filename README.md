@@ -74,6 +74,9 @@ People who want to describe what they want and have it built correctly — witho
 
 ## Getting Started
 
+> [!NOTE]
+> `npx get-shit-done-cc` installs the **original upstream GSD** from npm, not this fork. To install this fork with specialist delegation and it-just-works mode, see [Installing This Fork](#installing-this-fork) below.
+
 ```bash
 npx get-shit-done-cc@latest
 ```
@@ -91,6 +94,9 @@ GSD evolves fast. Update periodically:
 ```bash
 npx get-shit-done-cc@latest
 ```
+
+> [!NOTE]
+> This updates to the upstream npm version. If you installed this fork, re-run `node bin/install.js` from your cloned repo instead.
 
 <details>
 <summary><strong>Non-interactive Install (Docker, CI, Scripts)</strong></summary>
@@ -131,32 +137,34 @@ Installs to `./.claude/` for testing modifications before contributing.
 </details>
 
 <details>
-<summary><strong>Installing Local Version (Override Existing Install)</strong></summary>
+<summary><strong>Installing This Fork</strong></summary>
 
-If you already have GSD installed via npm and want to use a local/forked version instead:
+This fork adds specialist delegation, it-just-works mode, and unified verification. To install:
 
 ```bash
-# Clone your fork or the main repo
-git clone https://github.com/YOUR_USERNAME/get-shit-done.git
+# Clone this fork
+git clone https://github.com/mettamatt/get-shit-done.git
 cd get-shit-done
 
-# Copy directly to global Claude config (overwrites npm version)
-cp -R get-shit-done ~/.claude/get-shit-done
-
-# Copy agents
-cp -R agents/* ~/.claude/agents/
-
-# Verify installation
-ls ~/.claude/get-shit-done/
+# Install globally
+node bin/install.js --claude --global
 ```
 
-To switch back to the npm version:
+To update this fork:
 ```bash
+cd get-shit-done
+git pull
+node bin/install.js --claude --global
+```
+
+To switch back to upstream npm version:
+```bash
+cd ~
 npx get-shit-done-cc@latest --claude --global
 ```
 
 > [!NOTE]
-> The local copy takes precedence because it's in the same location. Running the npm installer again will overwrite your local changes.
+> Run `npx` from outside the repo directory, otherwise it uses local files instead of npm.
 
 </details>
 
@@ -334,18 +342,25 @@ This is why "vertical slices" (Plan 01: User feature end-to-end) parallelize bet
 
 **This is where you confirm it actually works.**
 
-Automated verification checks that code exists and tests pass. But does the feature *work* the way you expected? This is your chance to use it.
+The system runs a two-stage verification pipeline:
 
-The system:
+**Stage 1: Structural Verification**
+- Must-haves from PLAN.md exist and are implemented
+- Key code links function correctly (imports, exports, routes)
+- Anti-patterns are absent (hardcoded values, missing error handling)
 
-1. **Extracts testable deliverables** — What you should be able to do now
-2. **Walks you through one at a time** — "Can you log in with email?" Yes/no, or describe what's wrong
-3. **Diagnoses failures automatically** — Spawns debug agents to find root causes
-4. **Creates verified fix plans** — Ready for immediate re-execution
+**Stage 2: Functional Verification (UAT)**
+- Extracts testable deliverables from the phase
+- Walks you through one at a time — "Can you log in with email?"
+- You confirm: pass, fail with description, or skip
 
-If everything passes, you move on. If something's broken, you don't manually debug — you just run `/gsd:execute-phase` again with the fix plans it created.
+**Automated mode (`--auto`):** Instead of prompting you, spawns agent teams to verify functional behavior automatically. Useful for `/gsd:it-just-works` and CI pipelines.
 
-**Creates:** `{phase_num}-UAT.md`, fix plans if issues found
+If everything passes, you move on. If something's broken:
+1. **Diagnoses failures** — Spawns debug agents to find root causes
+2. **Creates fix phases** — Ready for re-execution (or auto-inserts with `auto_insert_fix_phases`)
+
+**Creates:** `{phase_num}-VERIFICATION.md`, fix phases if issues found
 
 ---
 
@@ -393,6 +408,43 @@ Use for: bug fixes, small features, config changes, one-off tasks.
 ```
 
 **Creates:** `.planning/quick/001-add-dark-mode-toggle/PLAN.md`, `SUMMARY.md`
+
+---
+
+### It Just Works Mode
+
+```
+/gsd:it-just-works
+```
+
+**For fully autonomous milestone execution.**
+
+This is GSD's ultimate automation mode. Zero human intervention from start to finish:
+
+1. **Validates config** — Enables all required settings automatically
+2. **Plans each phase** — With self-discussion (architect agents replace your Q&A)
+3. **Executes each phase** — Full parallel wave execution
+4. **Verifies each phase** — Unified structural + functional verification
+5. **Auto-inserts fix phases** — Creates phases from any verification gaps
+6. **Loops until done** — Continues until milestone completes or max phases reached
+7. **Audits milestone** — Confirms definition of done is met
+8. **Archives** — Completes and tags the milestone
+
+**Flags:**
+- `--max-phases N` — Safety limit, default 50
+- `--dry-run` — Validate config and show what would run
+
+**Self-Discussion Mode:**
+
+Instead of asking *you* questions during `/gsd:discuss-phase`, the system spawns architect agents to debate gray areas. Each topic gets N rounds of deeper questioning (configurable). The result is the same CONTEXT.md — but generated autonomously.
+
+```
+/gsd:it-just-works
+# Walk away. Come back to a completed milestone.
+```
+
+> [!WARNING]
+> This command will not stop for confirmation. It will plan, execute, verify, and fix until the milestone is complete. Only use on projects where you trust the roadmap and want full automation.
 
 ---
 
@@ -524,10 +576,11 @@ You're never locked in. The system adapts.
 | `/gsd:discuss-phase [N] [--auto]` | Capture implementation decisions before planning |
 | `/gsd:plan-phase [N] [--auto]` | Research + plan + verify for a phase |
 | `/gsd:execute-phase <N>` | Execute all plans in parallel waves, verify when complete |
-| `/gsd:verify-work [N]` | Manual user acceptance testing ¹ |
+| `/gsd:verify-work [N] [--auto]` | User acceptance testing (manual or automated ¹) |
 | `/gsd:audit-milestone` | Verify milestone achieved its definition of done |
 | `/gsd:complete-milestone` | Archive milestone, tag release |
 | `/gsd:new-milestone [name]` | Start next version: questions → research → requirements → roadmap |
+| `/gsd:it-just-works [--max-phases N]` | Fully autonomous execution — plan, execute, verify, fix until done |
 
 ### Navigation
 
@@ -573,7 +626,7 @@ You're never locked in. The system adapts.
 | `/gsd:quick [--full]` | Execute ad-hoc task with GSD guarantees (`--full` adds plan-checking and verification) |
 | `/gsd:health [--repair]` | Validate `.planning/` directory integrity, auto-repair with `--repair` |
 
-<sup>¹ Contributed by reddit user OracleGreyBeard</sup>
+<sup>¹ `--auto` runs automated verification via agent teams instead of prompting you</sup>
 
 ---
 
@@ -615,6 +668,10 @@ These spawn additional agents during planning/execution. They improve quality bu
 | `workflow.plan_check` | `true` | Verifies plans achieve phase goals before execution |
 | `workflow.verifier` | `true` | Confirms must-haves were delivered after execution |
 | `workflow.auto_advance` | `false` | Auto-chain discuss → plan → execute without stopping |
+| `workflow.self_discussion` | `false` | Use architect agents instead of user Q&A during discuss-phase |
+| `workflow.self_discussion_rounds` | `3` | Rounds of deeper questioning per topic (2-4) |
+| `workflow.auto_insert_fix_phases` | `false` | Create fix phases from verification gaps automatically |
+| `workflow.nyquist_validation` | `true` | Research test coverage during planning; blocks plans lacking automated verify |
 
 Use `/gsd:settings` to toggle these, or override per-invocation:
 - `/gsd:plan-phase --skip-research`
@@ -769,6 +826,8 @@ This repository is a fork of the original [Get Shit Done](https://github.com/gli
 - **Verification Specialists** — Tiered code review with code-reviewer, qa-expert, and principal-engineer
 - **Dynamic Agent Discovery** — Enumerates 129+ specialists from VoltAgent plugins
 - **Agent Teams Integration** — Leverages Claude Code's experimental agent teams feature
+- **It Just Works Mode** — Fully autonomous milestone execution with self-discussion and auto-fix phases
+- **Unified Verification** — Two-stage structural + functional verification pipeline
 
 All credit for the core GSD architecture, workflow design, and context engineering goes to TÂCHES. This fork extends the execution and verification layers with specialist delegation.
 
